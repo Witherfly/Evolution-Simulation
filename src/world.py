@@ -346,8 +346,6 @@ class World():
             
             obs_list += species_obs_array
 
-       
-
         obs_array = np.array(obs_list) 
         
         return obs_array
