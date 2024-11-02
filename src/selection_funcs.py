@@ -2,7 +2,7 @@ import numpy as np
 import datetime
 import os
 
-from .utils import get_newest_file
+from utils import get_newest_file
 
 class Zone_selection:
     def __init__(self, zone_type : str | tuple[str, ...], alive_area : float | tuple[float, ...], world_shape : tuple[int, int]):

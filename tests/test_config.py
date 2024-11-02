@@ -1,10 +1,11 @@
 import numpy as np 
 import pytest
 
-from src.genetic import *
+from src.world import *
 from src import selection_funcs
 from src import obstacles
 from src import callbacks_module
+from src import custom_callbacks
 
 
 #############################################
@@ -25,9 +26,9 @@ wall_mask1 = obstacles.Wall(world_shape).mask
 wall_mask_custom = obstacles.Load_wall("wall_masks", "newest").mask 
 
 # callbacks 
-world_state_logging = callbacks_module.LogWorldState('polynomial', n_max_gen, n_logs=n_logs, log_pos=False)
-weights_logging = callbacks_module.LogWeights('polynomial', n_max_gen, n_logs=n_logs)
-time_gens = callbacks_module.TimeGens()
+world_state_logging = custom_callbacks.LogWorldState('polynomial', n_max_gen, n_logs=n_logs, log_pos=False)
+weights_logging = custom_callbacks.LogWeights('polynomial', n_max_gen, n_logs=n_logs)
+time_gens = custom_callbacks.TimeGens()
 
 
 world = World(world_shape=world_shape, n_population=150, n_steps=100, n_max_gen=n_max_gen,

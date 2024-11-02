@@ -2,21 +2,14 @@ import cv2
 import os
 import numpy as np 
 
+from utils import get_newest_file
 
 
-def newest(dir_path):
-    # os.chdir(dir_path)
-    files = os.listdir(dir_path)
 
-    key = lambda f : os.path.getctime(os.path.join(dir_path, f))
-    max_file = max(files, key=key)
-    
-    # os.chdir('..')
-    return os.path.join(dir_path, max_file)
 
-path_wall = newest("custom_masks/wall_masks/")
+path_wall = get_newest_file("custom_masks/wall_masks/")
 
-path_death = newest("custom_masks/death_masks/")
+path_death = get_newest_file("custom_masks/death_masks/")
 
 if True:
     death_mask = np.loadtxt(path_death) *0.5

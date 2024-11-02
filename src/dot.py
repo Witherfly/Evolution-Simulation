@@ -1,6 +1,6 @@
 import numpy as np
 import numpy.typing as npt
-from .brain import Brain
+from brain import Brain
 
 class Dot():
     

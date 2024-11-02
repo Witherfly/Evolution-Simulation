@@ -4,7 +4,7 @@ import os
 
 import numpy.typing as npt
 
-from .utils import get_newest_file
+from utils import get_newest_file
 
 class Wall():
     

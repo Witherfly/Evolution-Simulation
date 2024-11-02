@@ -4,9 +4,11 @@ import os
 import json 
 import datetime 
 
-from .dot import Dot
-from .live_plot import plot 
-from . import callbacks_module
+from dot import Dot
+from breed_offspring import create_offspring
+from live_plot import plot 
+from callbacks_module import Callback, CallbackList
+from custom_callbacks import LoggingCallback
 
 
 from collections.abc import Callable
@@ -18,12 +20,13 @@ from typing import Any
 class World():
     
     def __init__(self, world_shape, n_population, n_steps, n_max_gen, 
-                 mutation_rate, flip_rate, n_connections, create_logs,
+                 n_connections, create_logs,
                  death_func : Callable[[np.ndarray], tuple[np.ndarray, dict[str , int] | None]]
-                 ,no_spawn_in_zone=False, kill_enabled=False, 
+                 ,no_spawn_in_zone=False, 
+                 kill_enabled=False, 
                  wall_mask : npt.NDArray[np.bool_] | None = None, 
-                 crossover_func_name="one_point_crossover",
-                 random_state=42, callbacks : list[callbacks_module.Callback] | None = None,
+                 random_state=42, 
+                 callbacks : list[Callback] | None = None,
                  n_species : int = 1,
                  trans_species_killing : str = 'no_restriction', # domestic_only, foreign_only 
                  species_obs : bool = False,
@@ -37,8 +40,6 @@ class World():
         self.current_step = 0 
         self.n_steps = n_steps
         self.n_max_gen = n_max_gen
-        self.mutation_rate = mutation_rate
-        self.flip_rate = flip_rate 
         self.create_logs = create_logs
         self.death_func = death_func
         self.no_spawn_in_zone = no_spawn_in_zone
@@ -67,20 +68,16 @@ class World():
             
         
         # callbacks 
-        self.callbacks = callbacks_module.CallbackList(callbacks)
+        self.callbacks = CallbackList(callbacks)
         if not self.create_logs:
-            self.callbacks.remove_logging_callbacks()
+            self.callbacks.remove_callbacks_type(LoggingCallback)
         if callbacks is None:
-            self.callbacks = callbacks_module.CallbackList()
+            self.callbacks = CallbackList()
         
-        crossover_func_dict = {"one_point_crossover":self.one_point_crossover,
-                               "gene_mix_crossover": self.gene_mix_crossover}
-        
-        self.crossover_func = crossover_func_dict[crossover_func_name]
         
         self.rnd_seed = random_state
         
-        self.obstacles_enababled = False if self.wall_mask is None or False else True 
+        self.obstacles_enabled = False if self.wall_mask is None or False else True 
         
         self.world_size = self.world_shape[0] * self.world_shape[1]
         
@@ -95,16 +92,16 @@ class World():
         
         if self.kill_enabled:
             self.n_dif_outputs += 4
-        if self.obstacles_enababled:
+        if self.obstacles_enabled:
             self.n_dif_inputs += 4
         if self.species_obs:
             self.n_dif_inputs += 4 
         
         # plotting
+        self.n_killed_list : list[int] = []
+        self.n_survived_list : list[int] = []
         
-        self.n_survivors_list = []
-        self.n_killed_list = []
-        self.n_killed = 0
+        
         
         self.plot_dict : dict[str , list[float]] = {}
 
@@ -118,7 +115,7 @@ class World():
     def get_config(self) -> dict[str, Any]:
             
         log_var_list = ["world_shape", "n_population", 'n_steps', 'n_max_gen', 
-            'mutation_rate', 'flip_rate', 'n_connections', 'create_logs', 
+            'n_connections', 'create_logs', 
             'kill_enabled', 'no_spawn_in_zone', 'n_species', 'trans_species_killing']
         
         param_dict = {key:self.__dict__[key] for key in log_var_list}
@@ -132,7 +129,7 @@ class World():
         
         world_idx_flatt = np.arange(self.world_size)
         
-        if self.obstacles_enababled:
+        if self.obstacles_enabled:
             wall_idx = np.ravel(np.argwhere(np.ravel(self.wall_mask)))
         else:
             wall_idx = np.array([], dtype=np.int32)
@@ -143,7 +140,7 @@ class World():
         else:
             zone_idx = np.array([], dtype=np.int32)
             
-        if self.obstacles_enababled or self.no_spawn_in_zone:       
+        if self.obstacles_enabled or self.no_spawn_in_zone:       
             world_idx_flatt = np.delete(world_idx_flatt, np.r_[wall_idx, zone_idx])
             
 
@@ -186,161 +183,22 @@ class World():
         self.callbacks.on_init_simulation(self)
             
 
-                     
-    def selection(self, is_alive : npt.NDArray[np.bool_]) -> list[Dot]:
-        
-        parent_objects  = [dot for i, dot in enumerate(self.dot_objects) if is_alive[i] and dot.alive]
+    @staticmethod 
+    def selection(dot_objects : list[Dot], survived : npt.NDArray[np.bool_]) -> tuple[list[Dot], int, int]:
+
+        n_survivors = 0
+        n_killed = 0
+        parent_objects = []
+        for i, dot in enumerate(dot_objects):
+            if not dot.alive:
+                n_killed += 1
+                continue
+            if survived[i]:
+                n_survivors += 1
+                parent_objects.append(dot)
+
+        return parent_objects, n_survivors, n_killed
     
-        return parent_objects
-    
-    def crossover(self, parent_objects : list[Dot]) -> list[Dot]:
-        
-        new_dot_objects = []
-        
-        n_survivors = len(parent_objects)   # case of survivors == 1 or 0      
-        self.n_survivors_list.append(n_survivors)
-        
-        n_parents = 2
-
-        if self.n_species > 1:
-            
-            parent_objects_species : list[list[Dot]] = []
-            for species in range(1, self.n_species + 1):
-                parent_objects_species.append([parent for parent in parent_objects if parent.species == species])
-        
-            for i, parent_objects in enumerate(parent_objects_species):
-                
-                n_childs = self.species_abs_size[i]
-                if len(parent_objects) < n_parents:
-                    parent_objects = [dot for dot in self.dot_objects if dot.species == i + 1]
-                
-                parent_pairs : list[list[Dot]] = [random.sample(parent_objects, n_parents) for _ in range(int(n_childs / n_parents))]
-                
-                for pair in parent_pairs:
-
-                    offspring = self.crossover_func(pair)
-                    for o in offspring:
-                        o.species = i + 1
-                        
-                    new_dot_objects.append(offspring)
-                    
-        else:
-            for i in range(int(self.n_population / n_parents)):
-            
-                if len(parent_objects) > 1:
-                    parents = random.sample(parent_objects, n_parents)
-                elif len(parent_objects) == 1:
-                    parents = parent_objects 
-                    parents.append(random.choice(self.dot_objects))
-                
-                else:
-                    print("no survivors")
-                    parents = random.sample(self.dot_objects, n_parents)
-                    
-                
-                offspring = self.crossover_func(parents)
-                
-                for o in offspring:
-                    new_dot_objects.append(o)
-            
-                
-         
-               
-        # assign correct id to objects       
-        for i, dot in enumerate(new_dot_objects):
-            
-            dot.id = i 
-            
-        return new_dot_objects
-          
-    def one_point_crossover(self, parents : list[Dot]) -> list[Dot]:
-        
-        genome_len = len(parents[0].genome)
-
-        idx = np.random.randint(genome_len) # x's between genes dont need to be stript
-        
-        head_a, tail_a = parents[0].genome[:idx], parents[0].genome[idx:]
-        head_b, tail_b = parents[1].genome[:idx], parents[1].genome[idx:]
-        
-        offspring_a_genome = head_a + tail_b 
-        offspring_b_genome = head_b + tail_a 
-        
-        new_offspring = []
-        
-        new_offspring.append(Dot(1, offspring_a_genome))
-        new_offspring.append(Dot(1, offspring_b_genome))
-        
-        return new_offspring 
-    
-    def gene_mix_crossover(self, parents : list[Dot]) -> list[Dot]:
-        
-        
-        genes_a = parents[0].genome.split('x')[:-1]
-        debug_a = parents[0].genome.split('x')
-        
-        genes_b = parents[1].genome.split('x')[:-1]
-        
-        n_genes = len(genes_a)
-        
-        n_offspring = 2 
-        new_offspring = []
-        
-        for ofspr in range(n_offspring):
-            
-            n_genes_from_a = np.random.randint(n_genes)
-            n_genes_from_b = n_genes - n_genes_from_a
-            
-            genome = []
-            genome += random.sample(genes_a, n_genes_from_a)
-            genome += random.sample(genes_b, n_genes_from_b) 
-            
-            new_genome = 'x'.join(genome) + 'x'
-            new_offspring.append(Dot(1, new_genome))
-            
-        return new_offspring           
-        
-    def bit_flip_mutation(self, new_dot_objects : list[Dot]) -> list[Dot]:
-        
-        
-        len_genome = len(new_dot_objects[0].genome)
-        # approximate binomial distribution with gaussian
-        mean = self.n_population*self.mutation_rate
-        standard_deviation = np.sqrt(mean * (1 - self.mutation_rate))
-        n_mutants = int(np.round(np.random.normal(loc=mean, scale=standard_deviation)))
-        
-        n_mutants = n_mutants if n_mutants >= 0 else 0
-       
-        mutant_dot_objects = random.sample(new_dot_objects, n_mutants)
-        
-        
-        
-        mean_flips = len_genome * self.flip_rate 
-        standard_deviation_flips = np.sqrt(mean * (1 - mean_flips / len_genome) )
-        
-        
-        
-        for dot in mutant_dot_objects:
-            old_genome = dot.genome
-            new_genome = old_genome
-            
-            n_flips = int(np.round(np.random.normal(loc=mean_flips, scale=standard_deviation_flips)))
-            for _ in range(n_flips):
-                while True: # if random idx lands at 'x' --> loop doesnt break
-                    rnd_idx = np.random.randint((len(old_genome)))
-                    
-                    if old_genome[rnd_idx] == '0':
-                        new_genome = new_genome[:rnd_idx] + '1' + new_genome[rnd_idx + 1:] #string is immutable
-                        break
-                        
-                    elif old_genome[rnd_idx] == '1':
-                        new_genome = new_genome[:rnd_idx] + '0' + new_genome[rnd_idx + 1:]
-                        break
-            
-            dot.genome = new_genome
-            
-            
-        return new_dot_objects
-
     def start_simulation(self):
         
         self.callbacks.on_run_begin(self) 
@@ -351,9 +209,6 @@ class World():
             self.current_gen = gen
             self.callbacks.on_gen_begin(self)
 
-            
-            
-            
             self.place_pop()
             for step in range(1, self.n_steps + 1):
                 
@@ -367,28 +222,23 @@ class World():
                         
                         self.apply_action(dot.id, action) # grid is updated here individually
 
-                # if self.create_logs:   
-                #     #log(gen, step)
-                #     pass 
                 
                 self.callbacks.on_step_end(self)
                     
             is_alive, zone_info_dict = self.death_func(self.pop_pos) 
             
-            parent_objects = self.selection(is_alive)
+            parent_objects, n_survived, n_killed = self.selection(self.dot_objects, is_alive)
+            ######
+            # new_dot_objects = self.crossover(parent_objects) 
             
-            new_dot_objects = self.crossover(parent_objects) 
-            
-            self.dot_objects = self.bit_flip_mutation(new_dot_objects)
-            
+            # self.dot_objects = self.bit_flip_mutation(new_dot_objects)
+            self.dot_objects = create_offspring(parent_objects, self.dot_objects, self.n_population) 
             for dot in self.dot_objects:
                 if dot.alive:
                     dot.unencode_genome(self.n_dif_inputs, self.n_dif_hidden, self.n_dif_outputs)
                     
             # plotting
             
-            self.n_killed_list.append(self.n_killed)
-            self.n_killed = 0 
             
             if zone_info_dict is not None:
                 for key in zone_info_dict.keys():
@@ -406,8 +256,10 @@ class World():
             
             
             
+            self.n_survived_list.append(n_survived)
+            self.n_killed_list.append(n_killed)
             
-            rel_survivors = np.array(self.n_survivors_list) / self.n_population
+            rel_survivors = np.array(self.n_survived_list) / self.n_population
             rel_killed = np.array(self.n_killed_list) / self.n_population
             
             is_last_gen = False if gen != self.n_max_gen else True 
@@ -424,11 +276,11 @@ class World():
         x, y = self.pop_pos[id] # note: at top x is 0, at bottom its positiv
         obs_list = []
         
-        north_distance = x # division for normalization between 0 and 1
+        north_distance = x 
         west_distance = y 
-        
-        north_distance_norm = north_distance / self.world_shape[0]
-        west_distance_norm = west_distance / self.world_shape[1]
+        # division for normalization between 0 and 1
+        north_distance_norm = north_distance / (self.world_shape[0] - 1)
+        west_distance_norm =  west_distance / (self.world_shape[1] - 1)
         
         nw_distances = [north_distance_norm, west_distance_norm]
         
@@ -436,43 +288,47 @@ class World():
         
         try:
             north_blocked = self.world_state[x - 1, y]
+        except IndexError:
+            north_blocked = 0
+        try:
             south_blocked = self.world_state[x + 1, y]
         except IndexError:
-            north_blocked, south_blocked = 0, 0
-            
-            
+            south_blocked = 0
         try:
-            east_blocked = self.world_state[x , y + 1]
             west_blocked = self.world_state[x , y - 1]
         except IndexError:
-            east_blocked, west_blocked = 0, 0
+            west_blocked = 0
+        try:
+            east_blocked = self.world_state[x , y + 1]
+        except IndexError:
+            east_blocked = 0
         
-        nsew_blocked = [north_blocked, south_blocked, east_blocked, west_blocked]
+        nswe_blocked = [north_blocked, south_blocked, west_blocked, east_blocked]
         
-        obs_list += nsew_blocked
+        obs_list += nswe_blocked
         
         
-        
-        if self.obstacles_enababled:
+        if self.wall_mask is not None:
             try:
                 north_wall = self.wall_mask[x - 1, y]
+            except IndexError:
+                north_wall = 1
+            try:
                 south_wall = self.wall_mask[x + 1, y]
             except IndexError:
-                north_wall, south_wall = 1, 1
-                
-                
+                south_wall = 1
             try:
-                east_wall = self.wall_mask[x , y + 1]
                 west_wall = self.wall_mask[x , y - 1]
             except IndexError:
-                east_wall, west_wall = 1, 1 
+                west_wall = 1
+            try:
+                east_wall = self.wall_mask[x , y + 1]
+            except IndexError:
+                east_wall = 1
             
-            nsew_wall = [north_wall, south_wall, east_wall, west_wall]
-            obs_list += nsew_wall
+            nswe_wall = [north_wall, south_wall, west_wall, east_wall]
+            obs_list += nswe_wall
             
-               
-                
-
         if self.species_obs:
 
             north_species, south_species, east_species, west_species = False, False, False, False
@@ -502,17 +358,10 @@ class World():
             return None
         if check_occ and self.world_state[pos[0], pos[1]] == 0:
             return None
-        id : int = np.where(np.sum(self.pop_pos == pos, axis=1) == 2)[0].item()
-        return self.dot_objects[id]
+        idx = np.where(np.sum(self.pop_pos == pos, axis=1) == 2)[0].item()
+        #idx = np.argwhere(np.logical_and(self.pop_pos[:, 0] == pos[0], self.pop_pos[:, 1] == pos[1])).item()
+        return self.dot_objects[idx]
         
-    @property
-    def species_list(self):
-        
-        return [dot.species for dot in self.dot_objects]
-    
-    
-    
-    
     def apply_action(self, id : int, action : npt.NDArray[np.bool_]):
         
         
@@ -542,7 +391,6 @@ class World():
                 
         if kill_pos is not None and self.kill_enabled: 
             was_killed = self.kill(kill_pos, killer_id=id)
-            if was_killed: self.n_killed += 1 
                     
         def is_square_free(coords) -> bool:
             if coords[1] >= self.world_shape[1] or coords[0] >= self.world_shape[0]: # out of bound bottom and left
@@ -552,7 +400,7 @@ class World():
             elif self.world_state[coords[0], coords[1]] == 1: #square already ocupied by other dot
                 return False
             
-            elif self.obstacles_enababled: # square occupied by wall tile 
+            elif self.wall_mask is not None: # square occupied by wall tile 
                 if self.wall_mask[coords[0], coords[1]] == 1:
                     return False
             
@@ -566,10 +414,6 @@ class World():
             
             self.pop_pos[id] = new_pos 
                 
-           
-        
-            
-           
     def kill(self, kill_pos : tuple[int, int], killer_id : int) -> bool: # returns False if no kill happened
         
         victim = self.dot_at_pos((kill_pos[0], kill_pos[1]), check_occ=True)
@@ -595,4 +439,9 @@ class World():
         self.pop_pos[victim.id] = np.array([-2, -2]) 
         
         return True 
+    
+    @property
+    def species_list(self):
+        
+        return [dot.species for dot in self.dot_objects]
     

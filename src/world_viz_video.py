@@ -3,8 +3,8 @@ import numpy as np
 import os
 import json 
 
-from .distinct_color_generator import distinct_colors
-from .utils import get_newest_file
+from distinct_color_generator import distinct_colors
+from utils import get_newest_file
 
 
 os.chdir('src/logs/')
