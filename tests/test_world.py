@@ -27,26 +27,64 @@ def world_params() -> dict:
 
     return world_params
 
+def state_from_pop_pos(pop_pos, world_shape):
+    world_state = np.zeros(world_shape)
+    world_state[pop_pos[:, 0], pop_pos[:, 1]] = 1
+
+    return world_state
+
+
 params = [(np.array([[0, 0]]), [[0, 0, 0, 0, 0, 0]]), 
           (np.array([[9, 9]]), [[1, 1, 0, 0, 0, 0]]),
           (np.array([[0, 9], [1, 9]]), [[0, 1, 0, 1, 0, 0], [0.111, 1, 1, 0, 0, 0]]),
           (np.array([[3, 3], [3, 4]]), [[0.333, 0.333, 0, 0, 0, 1], [0.333, 0.444, 0, 0, 1, 0]])]
           
-@pytest.mark.parametrize("world_pop_pos, observations", params)
-def test_create_observation(world_params, world_pop_pos, observations):
+@pytest.mark.parametrize("pop_pos, observations", params)
+def test_create_observation(world_params, pop_pos, observations):
 
-    n_population = len(world_pop_pos)
+    n_population = len(pop_pos)
     world_params['n_population'] = n_population
     world = World(**world_params)
 
     world.dot_objects = [Dot(i, '000') for i in range(n_population)]
 
-    world.pop_pos = world_pop_pos
-    world.world_state = np.zeros(world.world_shape)
-    world.world_state[world.pop_pos[:, 0], world.pop_pos[:, 1]] = 1
+    world.pop_pos = pop_pos
+    world.world_state = state_from_pop_pos(pop_pos, world.world_shape)
     
 
     for i in range(n_population):
         obs = world.create_observation(i)
         np.testing.assert_allclose(obs, observations[i], atol=0.01)
+
+params = [((0, 0), 0), 
+          ((2, 3), 1),
+          ((9, 9), 2), 
+          ((1, 1), None),
+          ((0, 1), None),
+          ((100, 100), None),
+          ((-1, -1), None),
+          ((4, 6), ValueError)]
+@pytest.mark.parametrize('pos, expected', params)
+def test_dot_at_pos_idx(world_params, pos, expected):
+
+    pop_pos = np.array([[0, 0], [2, 3], [9, 9], [4, 6], [4, 6]])
+
+    world = World(**world_params)
+
+    world.pop_pos = pop_pos
+    world.n_population = len(pop_pos)
+    world.world_state = state_from_pop_pos(pop_pos, world.world_shape)
+    world.dot_objects = [Dot(i, '') for i in range(world.n_population)]
+
+    if expected is None:
+        assert world.dot_at_pos(pos, check_occ=True) is None
+    elif isinstance(expected, int):
+        assert world.dot_at_pos(pos, check_occ=True).id == expected
+    else:
+        with pytest.raises(expected):
+            world.dot_at_pos(pos, check_occ=True)
+
+
+
+
         

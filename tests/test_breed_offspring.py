@@ -6,9 +6,9 @@ from src.dot import Dot
 from unittest import mock
 
 
-params = [(20, 10), (30, 10), (10, 3)]
+params = [(10, 20), (10, 30), (3, 10), (2, 10), (4, 5), (2, 7)]
 
-@pytest.mark.parametrize('n_population, n_survivors', params)
+@pytest.mark.parametrize('n_survivors, n_population', params)
 def test_crossover(n_population, n_survivors):
 
 
@@ -52,7 +52,7 @@ def test_bit_flip_mutation(mocked):
     assert mutated_dot_objects == []
 
 params = [(10, 50, 0.5), (0, 10, 0.5), (1, 10, 0.5), (3, 10, 0.5), 
-          (10, 50, 0.1), (10, 50, 0.9), (10, 10, 0.3)]
+          (10, 50, 0.1), (10, 50, 0.9), (10, 10, 0.3), (26, 150, 0.8)]
 
 @pytest.mark.parametrize('n_parents, n_population, crossover_rate', params)
 def test_create_offspring(n_parents, n_population, crossover_rate):

@@ -21,14 +21,10 @@ class TimeGens(TimingCallback):
         self.gen_end_timestamps : list[float] = []
         self.printing_intervall : int = printing_intervall
         
-    def on_gen_begin(self, world):
-        
-        gen = world.current_gen
-
-        if gen == 1:
+    def on_run_begin(self, world):
             
-            self.time_first_gen_start = perf_counter()
-            self.gen_end_timestamps.append(self.time_first_gen_start)
+        self.time_first_gen_start = perf_counter()
+        self.gen_end_timestamps.append(self.time_first_gen_start)
             
             
     
@@ -48,7 +44,6 @@ class TimeGens(TimingCallback):
         if gen % self.printing_intervall == 0:
             
             self.print_summary()
-            self.log_time()
         
 
     def get_timing_summary(self):
@@ -60,20 +55,36 @@ class TimeGens(TimingCallback):
                        "average secs per gen": total_time / total_gens} 
         return timing_dict
             
-    def log_time(self):
-
-        data_dict = self.get_timing_summary()
-        with open(f"performance/timing{data_dict['total gens']}.json", "w") as fp:
-            json.dump(data_dict, fp, indent=4) 
     
     def print_summary(self):
         
         data = self.get_timing_summary()
         summary = data
         print(summary)
+
                      
 class LoggingCallback(Callback):
     pass
+
+class TimeGensLogger(TimeGens, LoggingCallback):
+    def __init__(self, logging_intervall: int = 5) -> None:
+        super().__init__()
+        self.logging_intervall = logging_intervall
+
+    def log_time(self):
+        data_dict = self.get_timing_summary()
+        with open(f"performance/timing{data_dict['total gens']}.json", "w") as fp:
+            json.dump(data_dict, fp, indent=4) 
+
+    def on_run_begin(self, world):
+        super().on_run_begin(world)
+
+    def on_gen_end(self, world):
+        super().on_gen_end(world)
+
+        if world.current_gen % self.logging_intervall == 0:
+            self.log_time()
+    
 
 class LoggingPointMixin(LoggingCallback):
     def __init__(self, log_points : str | list[int], n_max_gen : int, n_logs : int):
@@ -113,20 +124,25 @@ class LogWorldState(LoggingPointMixin):
         super().__init__(log_points, n_max_gen, n_logs)
         
         self.log_pos = log_pos
-        self.multi_species = False 
+        self.multi_species = False   
+        self.log_current_gen = False
 
-       
+    def on_gen_begin(self, world):
+        
+        if world.current_gen in self.log_points:
+            self.log_current_gen = True 
+        else:
+            self.log_current_gen = False 
+
+
                      
     def on_step_end(self, world):
 
-        gen = world.current_gen
-        step = world.current_step
-        
-        if gen in self.log_points:
+        if self.log_current_gen:
             
+            step = world.current_step
+            gen = world.current_gen
             world_state = world.world_state
-            
-            
             
             if step == 1:
                 if not os.path.isdir(f"generations/gen{gen}"):
@@ -137,10 +153,6 @@ class LogWorldState(LoggingPointMixin):
                 else:
                     os.mkdir(f'generations/gen{gen}/step_world_state')
                 os.mkdir(f'generations/gen{gen}/step_pop_pos')
-                
-            
-                
-                
             
             
             if self.multi_species:
@@ -153,7 +165,6 @@ class LogWorldState(LoggingPointMixin):
                 
             else: 
                 np.savetxt(f'generations/gen{gen}/step_world_state/step{step}', world_state, fmt="%5i")
-                
                 
                 
             if self.log_pos:

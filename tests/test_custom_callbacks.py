@@ -93,7 +93,8 @@ def test_LogWorldState(sample_world, tmp_path):
     sample_world.world_state = mock_world_state
 
     cbk = LogWorldState(log_points=[42], n_max_gen=100, n_logs=1)
-
+    cbk.on_gen_begin(sample_world)
+    
     cbk.on_step_end(sample_world)
 
     world_state = np.loadtxt(f"generations/gen{sample_world.current_gen}/step_world_state/step{sample_world.current_step}")

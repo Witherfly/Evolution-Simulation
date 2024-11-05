@@ -15,14 +15,19 @@ from collections.abc import Callable
 import numpy.typing as npt 
 from typing import Any 
 
-        
+
+
+def unencode_dot(dot, n_inputs, n_hidden, n_outputs):
+    dot.unencode_genome(n_inputs, n_hidden, n_outputs)
+    
  
 class World():
     
     def __init__(self, world_shape, n_population, n_steps, n_max_gen, 
                  n_connections, create_logs,
-                 death_func : Callable[[np.ndarray], tuple[np.ndarray, dict[str , int] | None]]
-                 ,no_spawn_in_zone=False, 
+                 death_func : Callable[[np.ndarray], tuple[np.ndarray, dict[str , int] | None]],
+                 live_plotting=True,
+                 no_spawn_in_zone=False, 
                  kill_enabled=False, 
                  wall_mask : npt.NDArray[np.bool_] | None = None, 
                  random_state=42, 
@@ -46,6 +51,7 @@ class World():
         self.kill_enabled = kill_enabled
         self.wall_mask = wall_mask 
         self.n_species = n_species
+        self.live_plotting = live_plotting
         if self.n_species == 1:
             if species_obs or species_rel_size is not None or trans_species_killing != 'no_restriction':
                 raise Exception("multi_species is off but species-specificts were passed as arguments")
@@ -213,10 +219,12 @@ class World():
             for step in range(1, self.n_steps + 1):
                 
                 self.current_step = step
-                for dot in self.dot_objects: # make more fair by shuffling object list 
+                
+                for i, dot in enumerate(self.dot_objects): 
                     
                     if dot.alive:
                         inputs = self.create_observation(dot.id)
+                        # inputs = observations[i]
                         
                         action = dot.move(inputs)
                         
@@ -228,44 +236,37 @@ class World():
             is_alive, zone_info_dict = self.death_func(self.pop_pos) 
             
             parent_objects, n_survived, n_killed = self.selection(self.dot_objects, is_alive)
-            ######
-            # new_dot_objects = self.crossover(parent_objects) 
             
-            # self.dot_objects = self.bit_flip_mutation(new_dot_objects)
             self.dot_objects = create_offspring(parent_objects, self.dot_objects, self.n_population) 
+            assert len(self.dot_objects) == self.n_population
+
             for dot in self.dot_objects:
-                if dot.alive:
-                    dot.unencode_genome(self.n_dif_inputs, self.n_dif_hidden, self.n_dif_outputs)
+                dot.unencode_genome(self.n_dif_inputs, self.n_dif_hidden, self.n_dif_outputs)
                     
             # plotting
             
-            
-            if zone_info_dict is not None:
-                for key in zone_info_dict.keys():
-                    if gen==1:
-                        if key not in self.plot_dict.keys():
-                            self.plot_dict.update({key: []})
-                        
+            if self.live_plotting:
+                if zone_info_dict is not None:
+                    for key in zone_info_dict.keys():
+                        if gen==1:
+                            if key not in self.plot_dict.keys():
+                                self.plot_dict.update({key: []})
+                            
+                    
+                        self.plot_dict[key].append(zone_info_dict[key] / self.n_population)
                 
-                    self.plot_dict[key].append(zone_info_dict[key] / self.n_population)
-            
-            else:
-                self.plot_dict = None 
+                else:
+                    self.plot_dict = None 
                 
+                self.n_survived_list.append(n_survived)
+                self.n_killed_list.append(n_killed)
                 
-            
-            
-            
-            self.n_survived_list.append(n_survived)
-            self.n_killed_list.append(n_killed)
-            
-            rel_survivors = np.array(self.n_survived_list) / self.n_population
-            rel_killed = np.array(self.n_killed_list) / self.n_population
-            
-            is_last_gen = False if gen != self.n_max_gen else True 
-            
-            plot(is_last_gen, rel_survivors, rel_killed, self.plot_dict)
-
+                rel_survivors = np.array(self.n_survived_list) / self.n_population
+                rel_killed = np.array(self.n_killed_list) / self.n_population
+                
+                is_last_gen = False if gen != self.n_max_gen else True 
+                
+                plot(is_last_gen, rel_survivors, rel_killed, self.plot_dict)
             
             self.callbacks.on_gen_end(self)
      
@@ -356,8 +357,8 @@ class World():
             return None
         if check_occ and self.world_state[pos[0], pos[1]] == 0:
             return None
-        idx = np.where(np.sum(self.pop_pos == pos, axis=1) == 2)[0].item()
-        #idx = np.argwhere(np.logical_and(self.pop_pos[:, 0] == pos[0], self.pop_pos[:, 1] == pos[1])).item()
+        # idx = np.where(np.sum(self.pop_pos == pos, axis=1) == 2)[0].item()
+        idx = np.argwhere(np.logical_and(self.pop_pos[:, 0] == pos[0], self.pop_pos[:, 1] == pos[1])).item()
         return self.dot_objects[idx]
         
     def apply_action(self, id : int, action : npt.NDArray[np.bool_]):

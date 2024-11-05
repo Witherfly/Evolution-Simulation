@@ -38,7 +38,7 @@ def crossover(parent_objects : list[Dot], crossover_func : Callable, n_populatio
                 new_dot_objects.append(offspring)
                 
     else:
-        for i in range(int(n_population / n_parents)):
+        for i in range(n_population // n_parents + 1):
         
             parents = random.sample(parent_objects, n_parents)
             
@@ -47,7 +47,7 @@ def crossover(parent_objects : list[Dot], crossover_func : Callable, n_populatio
             for o in offspring:
                 new_dot_objects.append(o)
         
-    return new_dot_objects
+    return new_dot_objects[:n_population]
         
 def one_point_crossover(parents : list[Dot]) -> list[Dot]:
     
@@ -138,7 +138,7 @@ def create_offspring(parents : list[Dot], all_dots, n_population, crossover_func
         parents = all_dots
         n_crossover_parents = 0
     else:
-        n_crossover_parents = int(crossover_rate * len(parents)) + 1
+        n_crossover_parents = round(crossover_rate * len(parents))
 
     crossover_parents = parents[:n_crossover_parents]
     mutation_parents = parents[n_crossover_parents:]

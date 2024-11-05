@@ -5,6 +5,7 @@ import json
 
 from distinct_color_generator import distinct_colors
 from utils import get_newest_file
+import sys
 
 
 os.chdir('src/logs/')
@@ -19,6 +20,9 @@ img_array = []
 path = get_newest_file()
 # gen = 61
 logged_gen = -1
+if len(sys.argv) > 1:
+    logged_gen = int(sys.argv[1])
+
 gen = os.listdir(f"{path}/generations/")[logged_gen]
 
 with open(path + '/world_configurations/world_params.json', 'r') as world_configs_file:
