@@ -1,20 +1,53 @@
 import numpy as np
 import numpy.typing as npt
-from brain import Brain
+from abc import abstractmethod
+from brain import Brain, SkipNeuralNet
 
-class Dot():
-    
-    def __init__(self, id : int, genome : str, species : int | None = None):
+class Dot:
+    def __init__(self, id : int | None = None, species : int | None = None):
         
         self.id = id
-        self.genome = genome 
-        self.alive = True 
         self.species = species
+        self.alive = True 
+        self.brain : Brain = None
+
+    @abstractmethod
+    def random_init(self, n_connections, n_neurons_per_layer):
+        pass
+
+    @abstractmethod
+    def unencode_genome(self, *args, **kwargs) -> None:
+        pass
+
+    def move(self, inputs : npt.NDArray[np.float32]) -> npt.NDArray[np.bool_]:
+        
+        action = self.brain.predict(inputs)
+        
+        return action
+
+class DotGeneless(Dot):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    def random_init(self, n_connections, n_neurons_per_layer: tuple[int], brain_type=SkipNeuralNet) -> None:
+
+        self.brain = brain_type.random_init(n_neurons_per_layer)
+
+    def unencode_genome(self, *args, **kwargs):
+        pass 
+
+class DotGenetic(Dot):
     
-    @staticmethod
-    def create_genome(n_connections, n_dif_inputs, n_dif_hidden, n_dif_outputs) -> str:
+    def __init__(self, *args, genome : str | None = None, **kwargs):
+        
+        super().__init__(*args, **kwargs)
+        self.genome : str = genome 
+    
+    
+    def random_init(self, n_connections, n_neurons_per_layer) -> None:
         
         genome = ''
+        n_inputs, n_hidden, n_outputs = n_neurons_per_layer
                 
         for i in range(n_connections):
             
@@ -22,14 +55,14 @@ class Dot():
             is_output = np.random.choice([0, 1], p=[0.7, 0.3])
             
             if  is_hidden == 0:
-                n1 = np.random.randint(n_dif_inputs)
+                n1 = np.random.randint(n_inputs)
             else:
-                n1 = np.random.randint(n_dif_hidden)
+                n1 = np.random.randint(n_hidden)
             
             if is_output == 1:
-                n2 = np.random.randint(n_dif_outputs)
+                n2 = np.random.randint(n_outputs)
             else:
-                n2 = np.random.randint(n_dif_hidden)
+                n2 = np.random.randint(n_hidden)
                 
             weight = np.random.randint(-32768, 32768) # 2 ** 15 = 32768
             
@@ -45,12 +78,14 @@ class Dot():
         
             genome += gen + 'x' #marks end of each gene
         
-        return genome
+        self.genome = genome
 
-       
-        
-    def unencode_genome(self, n_dif_input : int, n_dif_hidden : int, n_dif_output : int):
+        self.unencode_genome(n_neurons_per_layer)
+
+          
+    def unencode_genome(self, n_neurons_per_layer : tuple[int, ...]):
          
+        n_input, n_hidden, n_output = n_neurons_per_layer
         genes : list[str] = self.genome.split('x')[:-1]
         neuron_pairs  = []
         pair_weights : list[float] = []
@@ -66,23 +101,23 @@ class Dot():
             
             if is_hidden == 0:
                 
-                if n1 >= n_dif_input:
-                    n1 = int(n1 % n_dif_input)
+                if n1 >= n_input:
+                    n1 = int(n1 % n_input)
                 neuron_array[0] = n1
                 neuron_array[1] = -1000
                 
             elif is_hidden == 1:
                 
-                if n1 >= n_dif_hidden:
-                    n1 = int(n1 % n_dif_hidden)
+                if n1 >= n_hidden:
+                    n1 = int(n1 % n_hidden)
                 neuron_array[1] = n1
                 neuron_array[0] = -1000
             
             n2 = int(gene[7:12], 2)
             if is_output == 1:
                 
-                if n2 >= n_dif_output:
-                    n2 = int(n2 % n_dif_output)
+                if n2 >= n_output:
+                    n2 = int(n2 % n_output)
                     
                 neuron_array[2] = n2
                 if not is_hidden:
@@ -91,8 +126,8 @@ class Dot():
             
             elif is_output == 0 and is_hidden == 0:
                 
-                if n2 >= n_dif_hidden:
-                    n2 = int(n2 % n_dif_hidden) 
+                if n2 >= n_hidden:
+                    n2 = int(n2 % n_hidden) 
                     
                 neuron_array[2] = -1000
                 neuron_array[1] = n2 
@@ -112,11 +147,6 @@ class Dot():
 
          
         
-        self.brain = Brain(neuron_pairs, pair_weights, n_dif_input, n_dif_hidden, n_dif_output)
+        self.brain = Brain(neuron_pairs, pair_weights, n_input, n_hidden, n_output)
         self.brain.build_nn()
             
-    def move(self, inputs : npt.NDArray[np.float32]) -> npt.NDArray[np.bool_]:
-        
-        action = self.brain.predict(inputs)
-        
-        return action

@@ -6,7 +6,7 @@ import math
 from datetime import datetime
 from time import perf_counter
 import json 
-
+import csv
 
 class TimingCallback(Callback):
     pass
@@ -41,9 +41,9 @@ class TimeGens(TimingCallback):
             print(round(time_current_gen, 2), " s")    
         
         
-        if gen % self.printing_intervall == 0:
-            
-            self.print_summary()
+            if gen % self.printing_intervall == 0:
+                
+                self.print_summary()
         
 
     def get_timing_summary(self):
@@ -59,16 +59,19 @@ class TimeGens(TimingCallback):
     def print_summary(self):
         
         data = self.get_timing_summary()
-        summary = data
-        print(summary)
+        total_time = data['total time']
+        average_secs = data['average secs per gen']
+        print(f"total time: {total_time}s\naverage time per gen: {average_secs}secs\n")
 
                      
 class LoggingCallback(Callback):
     pass
 
+    
+
 class TimeGensLogger(TimeGens, LoggingCallback):
     def __init__(self, logging_intervall: int = 5) -> None:
-        super().__init__()
+        super().__init__(print_time_on_gen_end=False)
         self.logging_intervall = logging_intervall
 
     def log_time(self):
@@ -143,10 +146,18 @@ class LogWorldState(LoggingPointMixin):
             step = world.current_step
             gen = world.current_gen
             world_state = world.world_state
+            field_names = ["step", "total_killed", "total_in_zone"] + \
+                        [f"killed_species_{i}" for i in range(1, world.n_species+1)] + \
+                        [f"in_zone_species_{i}" for i in range(1, world.n_species+1)]
             
             if step == 1:
                 if not os.path.isdir(f"generations/gen{gen}"):
                     os.mkdir(f"generations/gen{gen}")
+                    os.mkdir(f"generations/gen{gen}/statistics")
+                    with open(f"generations/gen{gen}/statistics/stats.csv", "a") as fp:
+                        writer = csv.DictWriter(fp, fieldnames=field_names)
+                        writer.writeheader()
+                        
                 if world.n_species > 1:
                     self.multi_species = True 
                     os.mkdir(f'generations/gen{gen}/step_pop_pos_species') 
@@ -154,6 +165,25 @@ class LogWorldState(LoggingPointMixin):
                     os.mkdir(f'generations/gen{gen}/step_world_state')
                 os.mkdir(f'generations/gen{gen}/step_pop_pos')
             
+
+            with open(f"generations/gen{gen}/statistics/stats.csv", "a") as fp:
+                writer = csv.DictWriter(fp, fieldnames=field_names)
+                alive_dots = [dot for dot in world.dot_objects if dot.alive]
+                n_total_killed = world.n_population - len(alive_dots)
+                n_total_in_zone = sum(world.death_func(world.pop_pos[[dot.id for dot in alive_dots], :])[0])
+                n_killed_species = []
+                n_in_zone_species = []
+                for i in range(world.n_species):
+                    alive_dots_species = [dot for dot in alive_dots if dot.species == i + 1]
+                    n_killed_species.append(world.species_abs_size[i] - len(alive_dots_species))
+
+                    pop_pos_species = world.pop_pos[[dot.id for dot in alive_dots_species], :]
+                    is_in_zone, _ = world.death_func(pop_pos_species)
+                    n_in_zone_species.append(sum(is_in_zone))
+
+                row_vals = [world.current_step, n_total_killed, n_total_in_zone] + n_killed_species + n_in_zone_species
+                row = {key:val for key, val in zip(field_names, row_vals)}
+                writer.writerow(row)
             
             if self.multi_species:
                 pop_pos = world.pop_pos
@@ -161,7 +191,7 @@ class LogWorldState(LoggingPointMixin):
                 
                 pop_pos_species = np.c_[pop_pos, species] 
 
-                np.savetxt(f'generations/gen{gen}/step_pop_pos_species/step{step}', pop_pos_species, fmt="%5i")
+                np.savetxt(f'generations/gen{gen}/step_pop_pos_species/step{step}', pop_pos_species, fmt="%s")
                 
             else: 
                 np.savetxt(f'generations/gen{gen}/step_world_state/step{step}', world_state, fmt="%5i")

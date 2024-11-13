@@ -1,7 +1,8 @@
 import numpy as np
 import random 
 
-from dot import Dot
+from dot import Dot, DotGenetic, DotGeneless
+from brain import Brain, SkipNeuralNet
 from typing import Callable
 
 
@@ -9,7 +10,7 @@ from typing import Callable
     
 
 
-def crossover(parent_objects : list[Dot], crossover_func : Callable, n_population : int, n_species=1, species_abs_size=None) -> list[Dot]:
+def crossover(parent_objects : list[Dot], crossover_func : Callable, n_population : int, dot_type : Dot) -> list[Dot]:
     
     new_dot_objects = []
     
@@ -17,39 +18,19 @@ def crossover(parent_objects : list[Dot], crossover_func : Callable, n_populatio
     if len(parent_objects) < n_parents:
         raise Exception(f"only {len(parent_objects)} given, but at least expecting {n_parents}")
 
-    if n_species > 1:
-        
-        parent_objects_species : list[list[Dot]] = []
-        for species in range(1, n_species + 1):
-            parent_objects_species.append([parent for parent in parent_objects if parent.species == species])
-    
-        for i, parent_objects in enumerate(parent_objects_species):
-            
-            n_childs = species_abs_size[i]
-            
-            parent_pairs : list[list[Dot]] = [random.sample(parent_objects, n_parents) for _ in range(int(n_childs / n_parents))]
-            
-            for pair in parent_pairs:
-
-                offspring = crossover_func(pair)
-                for o in offspring:
-                    o.species = i + 1
-                    
-                new_dot_objects.append(offspring)
                 
-    else:
-        for i in range(n_population // n_parents + 1):
+    for _ in range(n_population // n_parents + 1):
+    
+        parents = random.sample(parent_objects, n_parents)
         
-            parents = random.sample(parent_objects, n_parents)
-            
-            offspring = crossover_func(parents)
-            
-            for o in offspring:
-                new_dot_objects.append(o)
+        offspring = crossover_func(parents, dot_type)
+        
+        for o in offspring:
+            new_dot_objects.append(o)
         
     return new_dot_objects[:n_population]
         
-def one_point_crossover(parents : list[Dot]) -> list[Dot]:
+def one_point_crossover(parents : list[Dot], dot_type : Dot) -> list[Dot]:
     
     genome_len = len(parents[0].genome)
 
@@ -63,12 +44,59 @@ def one_point_crossover(parents : list[Dot]) -> list[Dot]:
     
     new_offspring = []
     
-    new_offspring.append(Dot(1, offspring_a_genome))
-    new_offspring.append(Dot(1, offspring_b_genome))
+    new_offspring.append(dot_type(genome=offspring_a_genome))
+    new_offspring.append(dot_type(genome=offspring_b_genome))
     
     return new_offspring 
 
-def gene_mix_crossover(parents : list[Dot]) -> list[Dot]:
+def weights_row_crossover(parents : list[Dot], dot_type=DotGeneless):
+    
+    rng = np.random.default_rng()
+    all_weights1 = []
+    all_weights2 = []
+    for i in range(len(parents[0].brain.all_weights)):
+        new_weight1 = np.empty_like(parents[0].brain.all_weights[i])
+        new_weight2 = np.empty_like(parents[0].brain.all_weights[i])
+        row_mask = rng.integers(0, 2, size=new_weight1.shape[0]).astype(np.bool_)
+
+        new_weight1[row_mask, :] = parents[0].brain.all_weights[i][row_mask, :]
+        new_weight1[~row_mask, :] = parents[1].brain.all_weights[i][~row_mask, :]
+        new_weight2[~row_mask, :] = parents[0].brain.all_weights[i][~row_mask, :]
+        new_weight2[row_mask, :] = parents[1].brain.all_weights[i][row_mask, :]
+
+        all_weights1.append(new_weight1)
+        all_weights2.append(new_weight2)
+
+    child1 = dot_type()
+    child2 = dot_type()
+
+    child1.brain = SkipNeuralNet(all_weights=all_weights1)
+    child2.brain = SkipNeuralNet(all_weights=all_weights1)
+
+    return [child1, child2]
+
+
+    
+def dijkstra_on_output_crossover(parents : list[Dot], n_connections):
+
+
+    parent1_neuron_pairs = parents[0].brain.neuron_pairs
+    parent2_neuron_pairs = parents[1].brain.neuron_pairs
+
+    n_connections_used = 0
+    n_layers = len(parent1_neuron_pairs)
+
+    child1_neuron_pairs = []
+
+    layer_child = []
+    layer = parent1_neuron_pairs[-1]
+    for neuron in np.unique(layer):
+
+        layer_child.append(layer[neuron == layer[:, 1]])
+
+    NotImplemented
+
+def gene_mix_crossover(parents : list[Dot], dot_type=DotGenetic) -> list[Dot]:
     
     
     genes_a = parents[0].genome.split('x')[:-1]
@@ -91,10 +119,27 @@ def gene_mix_crossover(parents : list[Dot]) -> list[Dot]:
         genome += random.sample(genes_b, n_genes_from_b) 
         
         new_genome = 'x'.join(genome) + 'x'
-        new_offspring.append(Dot(1, new_genome))
+        new_offspring.append(dot_type(id=1, genome=new_genome))
         
     return new_offspring           
     
+def weights_mutation(dot_objects : list[Dot], flip_rate=0.1):
+
+    if len(dot_objects) == 0:
+        return []
+    
+    rng = np.random.default_rng()
+
+    for dot in dot_objects:
+        for i in range(len(dot.brain.all_weights)):
+            
+            # noise = rng.normal(size=dot.brain.all_weights[i].shape)
+            noise_mask = (rng.random(size=dot.brain.all_weights[i].shape) < flip_rate)
+
+            dot.brain.all_weights[i][noise_mask] += rng.normal(size=(np.count_nonzero(noise_mask),))
+    
+    return dot_objects
+
 def bit_flip_mutation(new_dot_objects : list[Dot], flip_rate=0.1) -> list[Dot]:
     
     if len(new_dot_objects) == 0:
@@ -128,12 +173,23 @@ def bit_flip_mutation(new_dot_objects : list[Dot], flip_rate=0.1) -> list[Dot]:
         
     return new_dot_objects
 
-def create_offspring(parents : list[Dot], all_dots, n_population, crossover_func=one_point_crossover, crossover_rate=0.8) -> list[Dot]:
-
+def create_offspring(parents : list[Dot], n_population, dot_type, species=None, crossover_func=one_point_crossover, mutation_func=bit_flip_mutation) -> list[Dot]:
     if len(parents) <= 1:
-        parents = all_dots
-        n_crossover_parents = 0
-    elif len(parents) * crossover_rate <= 2:
+        raise Exception("not enough parents provided")
+    
+    crossed_dots = crossover(parents, crossover_func, n_population, dot_type=dot_type)
+    mutated_dots = mutation_func(crossed_dots)
+    offspring = mutated_dots
+    
+    for dot in offspring:
+        dot.species = species 
+
+    return offspring
+
+
+def create_offspring_cm_seperat(parents : list[Dot], all_dots, n_population, dot_type, species=None, crossover_func=one_point_crossover, mutation_func=bit_flip_mutation, crossover_rate : float =0.8) -> list[Dot]:
+    
+    if len(parents) * crossover_rate <= 2:
         # n_crossover_parents = len(parents) if crossover_rate >= 0.5 else 0 
         parents = all_dots
         n_crossover_parents = 0
@@ -145,11 +201,11 @@ def create_offspring(parents : list[Dot], all_dots, n_population, crossover_func
 
     crossed_dots = []
     if n_crossover_parents >= 2:
-        crossed_dots = crossover(crossover_parents, crossover_func, n_population - (len(parents) - n_crossover_parents))
-    mutated_dots = bit_flip_mutation(mutation_parents)
+        crossed_dots = crossover(crossover_parents, crossover_func, n_population - (len(parents) - n_crossover_parents), dot_type=dot_type)
+    mutated_dots = mutation_func(mutation_parents)
     
     offspring = crossed_dots + mutated_dots
-    for i, dot in enumerate(offspring):
-        dot.id = i 
+    for dot in offspring:
+        dot.species = species 
 
     return offspring

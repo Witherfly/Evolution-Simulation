@@ -3,6 +3,7 @@ import genome_to_color
 import cv2
 import os 
 import json 
+from utils import get_newest_file
 
 os.chdir('logs/')
 

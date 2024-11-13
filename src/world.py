@@ -4,9 +4,9 @@ import os
 import json 
 import datetime 
 
-from dot import Dot
-from breed_offspring import create_offspring
-from live_plot import plot 
+from dot import Dot, DotGenetic
+from breed_offspring import create_offspring, one_point_crossover, bit_flip_mutation
+from live_plot import plot, PlottingStatCollector, StatCollector
 from callbacks_module import Callback, CallbackList
 from custom_callbacks import LoggingCallback
 
@@ -17,8 +17,6 @@ from typing import Any
 
 
 
-def unencode_dot(dot, n_inputs, n_hidden, n_outputs):
-    dot.unencode_genome(n_inputs, n_hidden, n_outputs)
     
  
 class World():
@@ -26,7 +24,11 @@ class World():
     def __init__(self, world_shape, n_population, n_steps, n_max_gen, 
                  n_connections, create_logs,
                  death_func : Callable[[np.ndarray], tuple[np.ndarray, dict[str , int] | None]],
+                 dot_type=DotGenetic,
+                 crossover_func=one_point_crossover,
+                 mutation_func=bit_flip_mutation,
                  live_plotting=True,
+                 plotting_stat_collector : PlottingStatCollector | None = None,
                  no_spawn_in_zone=False, 
                  kill_enabled=False, 
                  wall_mask : npt.NDArray[np.bool_] | None = None, 
@@ -44,6 +46,9 @@ class World():
         self.current_gen = 0
         self.current_step = 0 
         self.n_steps = n_steps
+        self.dot_type = dot_type
+        self.crossover_func = crossover_func
+        self.mutation_func = mutation_func
         self.n_max_gen = n_max_gen
         self.create_logs = create_logs
         self.death_func = death_func
@@ -52,26 +57,24 @@ class World():
         self.wall_mask = wall_mask 
         self.n_species = n_species
         self.live_plotting = live_plotting
-        if self.n_species == 1:
-            if species_obs or species_rel_size is not None or trans_species_killing != 'no_restriction':
-                raise Exception("multi_species is off but species-specificts were passed as arguments")
+        self.plotting_stat_collector = plotting_stat_collector 
+        if plotting_stat_collector is None:
+            self.plotting_stat_collector = StatCollector()
+        # if self.n_species == 1:
+        #     if species_obs or species_rel_size is not None or trans_species_killing != 'no_restriction':
+        #         raise Exception("multi_species is off but species-specificts were passed as arguments")
         self.trans_species_killing = trans_species_killing
         self.species_obs = species_obs
         if species_rel_size is None: # all species have the same size 
-            species_size = int(self.n_population / n_species)
-            species_size_mod = self.n_population % n_species
-            self.species_rel_size = [species_size,] * self.n_species
-                
-            if species_size_mod > 0:
-                for i in range(species_size_mod):
-                    self.species_rel_size[i] += 1
+            self.species_rel_size = tuple([1 / self.n_species,] * self.n_species)
 
         else:
             self.species_rel_size = species_rel_size
-            
-        self.species_rel_size = tuple(self.species_rel_size)
-        self.species_abs_size = np.array(self.species_rel_size) * self.n_population
-            
+        self.species_abs_size = [int(i*self.n_population) for i in self.species_rel_size]
+        for i in range(self.n_population - sum(self.species_abs_size)): 
+            self.species_abs_size[i] += 1
+        
+        self.species_abs_size = tuple(self.species_abs_size)
         
         # callbacks 
         self.callbacks = CallbackList(callbacks)
@@ -92,8 +95,8 @@ class World():
         self.world_state = np.zeros(self.world_shape, dtype=np.int8)
         
         self.n_connections = n_connections
-        self.n_dif_inputs = 6
-        self.n_dif_hidden = 3
+        self.n_dif_inputs = 9
+        self.n_dif_hidden = 10
         self.n_dif_outputs = 4
         
         if self.kill_enabled:
@@ -103,6 +106,7 @@ class World():
         if self.species_obs:
             self.n_dif_inputs += 4 
         
+        self.n_neurons_per_layer = (self.n_dif_inputs, self.n_dif_hidden, self.n_dif_outputs)
         # plotting
         self.n_killed_list : list[int] = []
         self.n_survived_list : list[int] = []
@@ -171,16 +175,15 @@ class World():
         self.dot_objects : list[Dot] = []
         
         if self.n_species > 1:
-            species_thresh = np.cumsum(np.array(self.species_rel_size) * self.n_population)
+            species_thresh = np.cumsum(self.species_abs_size)
         
         species = None 
         for i in range(self.n_population):
 
             if self.n_species > 1:
-                species = np.sum(species_thresh > i) + 1
-            genome = Dot.create_genome(self.n_connections, self.n_dif_inputs, self.n_dif_hidden, self.n_dif_outputs)
-            dot = Dot(i , genome, species)
-            dot.unencode_genome(self.n_dif_inputs, self.n_dif_hidden, self.n_dif_outputs)
+                species = np.sum(species_thresh <= i) + 1
+            dot = self.dot_type(id=i, species=species)
+            dot.random_init(self.n_connections, self.n_neurons_per_layer)
             
             self.dot_objects.append(dot)   
             
@@ -189,21 +192,54 @@ class World():
         self.callbacks.on_init_simulation(self)
             
 
-    @staticmethod 
-    def selection(dot_objects : list[Dot], survived : npt.NDArray[np.bool_]) -> tuple[list[Dot], int, int]:
+    @staticmethod
+    def selection(dot_objects : list[Dot], survived : npt.NDArray[np.bool_], stat_collector=None) -> tuple[list[Dot], int, int]:
 
-        n_survivors = 0
-        n_killed = 0
         parent_objects = []
         for i, dot in enumerate(dot_objects):
+            stat_collector(dot, survived[i])
             if not dot.alive:
-                n_killed += 1
                 continue
             if survived[i]:
-                n_survivors += 1
                 parent_objects.append(dot)
 
-        return parent_objects, n_survivors, n_killed
+        return parent_objects
+    
+    def make_next_generation(self, parent_objects) -> list[Dot]:
+
+        if self.n_species > 1:
+            new_dot_objects = [] 
+            for i in range(1, self.n_species + 1):
+                parent_objects_species = [d for d in parent_objects if d.species == i]
+                if len(parent_objects_species) <= 1:
+                    parent_objects_species = [d for d in self.dot_objects if d.species == i]
+                offspring = create_offspring(parent_objects_species, 
+                                             n_population=self.species_abs_size[i-1], 
+                                             species=i, 
+                                             dot_type=self.dot_type,
+                                             crossover_func=self.crossover_func,
+                                             mutation_func=self.mutation_func)
+                new_dot_objects += offspring
+
+        else:
+            if len(parent_objects) <= 1:
+                parent_objects = self.dot_objects
+            new_dot_objects = create_offspring(parent_objects, 
+                                             n_population=self.n_population,
+                                             dot_type=self.dot_type,
+                                             crossover_func=self.crossover_func,
+                                             mutation_func=self.mutation_func)
+
+        assert len(new_dot_objects) == self.n_population
+
+        # if hasattr(new_dot_objects[0], 'unencode_genome'):
+        for i, dot in enumerate(new_dot_objects):
+            dot.unencode_genome((self.n_dif_inputs, self.n_dif_hidden, self.n_dif_outputs))
+            dot.id = i
+            dot.alive = True
+        
+        return new_dot_objects
+
     
     def start_simulation(self):
         
@@ -217,6 +253,7 @@ class World():
 
             self.place_pop()
             for step in range(1, self.n_steps + 1):
+            
                 
                 self.current_step = step
                 
@@ -224,8 +261,6 @@ class World():
                     
                     if dot.alive:
                         inputs = self.create_observation(dot.id)
-                        # inputs = observations[i]
-                        
                         action = dot.move(inputs)
                         
                         self.apply_action(dot.id, action) # grid is updated here individually
@@ -235,47 +270,53 @@ class World():
                     
             is_alive, zone_info_dict = self.death_func(self.pop_pos) 
             
-            parent_objects, n_survived, n_killed = self.selection(self.dot_objects, is_alive)
-            
-            self.dot_objects = create_offspring(parent_objects, self.dot_objects, self.n_population) 
-            assert len(self.dot_objects) == self.n_population
-
-            for dot in self.dot_objects:
-                dot.unencode_genome(self.n_dif_inputs, self.n_dif_hidden, self.n_dif_outputs)
+            parent_objects = self.selection(self.dot_objects, is_alive, self.plotting_stat_collector)
                     
-            # plotting
+            self.dot_objects = self.make_next_generation(parent_objects)
             
             if self.live_plotting:
-                if zone_info_dict is not None:
-                    for key in zone_info_dict.keys():
-                        if gen==1:
-                            if key not in self.plot_dict.keys():
-                                self.plot_dict.update({key: []})
-                            
-                    
-                        self.plot_dict[key].append(zone_info_dict[key] / self.n_population)
-                
-                else:
-                    self.plot_dict = None 
-                
-                self.n_survived_list.append(n_survived)
-                self.n_killed_list.append(n_killed)
-                
-                rel_survivors = np.array(self.n_survived_list) / self.n_population
-                rel_killed = np.array(self.n_killed_list) / self.n_population
-                
-                is_last_gen = False if gen != self.n_max_gen else True 
-                
-                plot(is_last_gen, rel_survivors, rel_killed, self.plot_dict)
+                self.plot_live(zone_info_dict)
             
             self.callbacks.on_gen_end(self)
+    
+    def plot_live(self, zone_info_dict):
+
+        if zone_info_dict is not None:
+            for key in zone_info_dict.keys():
+                if self.current_gen==1:
+                    if key not in self.plot_dict.keys():
+                        self.plot_dict.update({key: []})
+                    
+            
+                self.plot_dict[key].append(zone_info_dict[key] / self.n_population)
+        
+        else:
+            self.plot_dict = None 
+
+        self.n_survived_list.append(self.plotting_stat_collector.survived_counts)
+        self.n_killed_list.append(self.plotting_stat_collector.killed_counts)
+        self.plotting_stat_collector.reset()
+
+        if self.n_species > 1 and len(self.n_survived_list[0]) == self.n_species:
+            rel_survivors = np.array(self.n_survived_list) / self.species_abs_size
+            rel_killed = np.array(self.n_killed_list) / self.species_abs_size
+        else:
+            rel_survivors = np.array(self.n_survived_list) / self.n_population
+            rel_killed = np.array(self.n_killed_list) / self.n_population
+        
+        is_last_gen = False if self.current_gen != self.n_max_gen else True 
+        
+        plot(is_last_gen, rel_survivors, rel_killed, self.plot_dict)
      
     def create_observation(self, id : int) -> npt.NDArray[np.float32]:
         
         
         dot = self.dot_objects[id]
-        x, y = self.pop_pos[id] # note: at top x is 0, at bottom its positiv
-        obs_list = []
+        x, y = self.pop_pos[id] # note: at top x is 0, at bottom its positiv, so x and y are swapped
+        step_frac = self.current_step / self.n_steps
+        oscillator1 = self.current_step % 2
+        oscillator2 = self.current_step % 3
+        obs_list = [step_frac, oscillator1, oscillator2]
         
         north_distance = x 
         west_distance = y 
@@ -288,15 +329,15 @@ class World():
         obs_list += nw_distances
         
         try:
-            north_blocked = self.world_state[x - 1, y]
+            north_blocked = self.world_state[x - 1, y] if x - 1 >= 0 else 0
         except IndexError:
             north_blocked = 0
         try:
-            south_blocked = self.world_state[x + 1, y]
+            south_blocked = self.world_state[x + 1, y] 
         except IndexError:
             south_blocked = 0
         try:
-            west_blocked = self.world_state[x , y - 1]
+            west_blocked = self.world_state[x , y - 1] if y - 1 >= 0 else 0
         except IndexError:
             west_blocked = 0
         try:
@@ -335,15 +376,15 @@ class World():
             north_species, south_species, east_species, west_species = False, False, False, False
             
             if north_blocked:            
-                north_species = self.dot_at_pos((x, y - 1)).species == dot.species
+                north_species = self.dot_at_pos((x-1, y)).species == dot.species
             if south_blocked:
-                south_species = self.dot_at_pos((x, y + 1)).species == dot.species
-            if east_blocked:
-                east_species = self.dot_at_pos((x + 1, y)).species == dot.species
+                south_species = self.dot_at_pos((x+1, y)).species == dot.species
             if west_blocked:
-                west_species = self.dot_at_pos((x - 1, y)).species == dot.species
+                west_species = self.dot_at_pos((x, y-1)).species == dot.species
+            if east_blocked:
+                east_species = self.dot_at_pos((x, y+1)).species == dot.species
             
-            species_obs_array = [north_species, south_species, east_species, west_species]
+            species_obs_array = [north_species, south_species, west_species, east_species]
             
             obs_list += species_obs_array
 
@@ -420,9 +461,10 @@ class World():
         if victim is None: #no dot found at kill pos
             return False 
 
-        killer = self.dot_objects[killer_id]
         
         if self.n_species > 1:
+            killer = self.dot_objects[killer_id]
+            
             match self.trans_species_killing:
                 case 'no_restricion': # No restriction 
                     pass 
