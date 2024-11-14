@@ -4,6 +4,9 @@ from contextlib import contextmanager
 import numpy as np
 import cv2
 
+from functools import wraps 
+from time import time
+
 
 @contextmanager
 def remember_cwd():
@@ -46,3 +49,19 @@ def sorted_alphanumeric(data):
     convert = lambda text: int(text) if text.isdigit() else text.lower()
     alphanum_key = lambda key: [ convert(c) for c in re.split('([0-9]+)', key) ] 
     return sorted(data, key=alphanum_key)
+
+
+def timing(f, print_args=False):
+    @wraps(f)
+    def wrap(*args, **kw):
+        ts = time()
+        result = f(*args, **kw)
+        te = time()
+        if print_args:
+            print('func:%r args:[%r, %r] took: %2.4f sec' % \
+            (f.__name__, args, kw, te-ts))
+        else:
+            print('func:%r took: %2.4f sec' % \
+            (f.__name__, te-ts))
+        return result
+    return wrap

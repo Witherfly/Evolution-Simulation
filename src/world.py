@@ -27,6 +27,7 @@ class World():
                  dot_type=DotGenetic,
                  crossover_func=one_point_crossover,
                  mutation_func=bit_flip_mutation,
+                 n_neurons_hidden_layer : tuple[int, ...] = (8,),
                  live_plotting=True,
                  plotting_stat_collector : PlottingStatCollector | None = None,
                  no_spawn_in_zone=False, 
@@ -96,7 +97,6 @@ class World():
         
         self.n_connections = n_connections
         self.n_dif_inputs = 9
-        self.n_dif_hidden = 10
         self.n_dif_outputs = 4
         
         if self.kill_enabled:
@@ -106,7 +106,7 @@ class World():
         if self.species_obs:
             self.n_dif_inputs += 4 
         
-        self.n_neurons_per_layer = (self.n_dif_inputs, self.n_dif_hidden, self.n_dif_outputs)
+        self.n_neurons_per_layer = (self.n_dif_inputs, *n_neurons_hidden_layer, self.n_dif_outputs)
         # plotting
         self.n_killed_list : list[int] = []
         self.n_survived_list : list[int] = []
@@ -234,7 +234,7 @@ class World():
 
         # if hasattr(new_dot_objects[0], 'unencode_genome'):
         for i, dot in enumerate(new_dot_objects):
-            dot.unencode_genome((self.n_dif_inputs, self.n_dif_hidden, self.n_dif_outputs))
+            dot.unencode_genome(self.n_neurons_per_layer)
             dot.id = i
             dot.alive = True
         
