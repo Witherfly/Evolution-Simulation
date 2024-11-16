@@ -69,8 +69,8 @@ if __name__ == '__main__':
     n = 100
     x, y1 = generate_points(n)
     x, y2 = generate_points(n, a=4)
-    save_frames_as_arrays = timing(save_frames_as_arrays)
-    frames = save_frames_as_arrays(x, [y1, y2])
+    plot_framed = timing(plot_framed)
+    frames = plot_framed(x, [y1, y2], Y_labels=['1', '2'])
 
     # exit()
     i = 0

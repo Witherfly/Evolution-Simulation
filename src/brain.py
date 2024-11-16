@@ -90,10 +90,14 @@ class Brain2:
 
 class SkipNeuralNet:
 
-    def __init__(self, all_weights):           
-        assert len(all_weights) == 3
+    def __init__(self, all_weights, n_neurons_per_layer, activation_func=np.tanh):           
         self.all_weights = all_weights
         self.output_size = self.all_weights[-1].shape[0]
+        self.n_neurons_per_layer = n_neurons_per_layer
+        self.activation_func = activation_func
+
+    def get_configs(self):
+        return {key:val for key, val in self.__dict__.items() if key in ['n_neurons_per_layer', 'activation_func']}
 
     @classmethod
     def random_init(cls, n_neurons_per_layer):
@@ -108,21 +112,53 @@ class SkipNeuralNet:
                 weights_ij = rng.normal(size=(n_neurons_per_layer[j], n_neurons_per_layer[i]+1)) # 2 ** 15 = 32768
                 all_weights.append(weights_ij) 
             
-        return cls(all_weights)
+        return cls(all_weights, n_neurons_per_layer)
 
-    def predict(self, input : npt.NDArray[np.float32]) -> npt.NDArray[np.bool_]:
+    # def predict(self, input : npt.NDArray[np.float32]) -> npt.NDArray[np.bool_]:
         
-        weight_ih, weight_io, weight_ho = self.all_weights
-        input = np.append(input, 1.0).reshape(-1, 1)
+    #     weight_ih, weight_io, weight_ho = self.all_weights
+    #     input = np.append(input, 1.0).reshape(-1, 1)
 
-        hidden = np.append(np.tanh( weight_ih @ input), 1.0).reshape(-1, 1)
-        output = np.tanh(weight_io @ input + weight_ho @ hidden)
+    #     hidden = np.append(np.tanh( weight_ih @ input), 1.0).reshape(-1, 1)
+    #     output = np.tanh(weight_io @ input + weight_ho @ hidden)
         
+    #     action : int = np.argmax(np.ravel(output)).item()
+    #     action_array = np.zeros((self.output_size,), dtype=np.bool_)
+    #     action_array[action] = True
+        
+    #     return action_array
+
+    def predict(self, input):
+
+        n_layers = len(self.n_neurons_per_layer)
+        layer_outputs = np.empty((len(self.n_neurons_per_layer),
+                                   max(self.n_neurons_per_layer)+1))
+        layer_outputs[0, 1:self.n_neurons_per_layer[0]+1] = input
+        layer_outputs[:, 0] = 1
+        
+            
+        for i in range(1, n_layers):
+
+            idx = i - 1
+
+            output = layer_outputs[i, 1:self.n_neurons_per_layer[i]+1].copy()
+            k = 0
+            for j in range(n_layers-2, n_layers-i, -1):
+                output += self.all_weights[idx] @ layer_outputs[k, :self.n_neurons_per_layer[k]+1]
+                idx += j
+                k += 1
+            
+            layer_outputs[i, 1:self.n_neurons_per_layer[i]+1] = self.activation_func(output)
+
+        
+        output = layer_outputs[-1, 1:self.n_neurons_per_layer[-1]+1]
         action : int = np.argmax(np.ravel(output)).item()
         action_array = np.zeros((self.output_size,), dtype=np.bool_)
         action_array[action] = True
         
         return action_array
+
+
 
 
 

@@ -70,8 +70,8 @@ def weights_row_crossover(parents : list[Dot], dot_type=DotGeneless):
     child1 = dot_type()
     child2 = dot_type()
 
-    child1.brain = SkipNeuralNet(all_weights=all_weights1)
-    child2.brain = SkipNeuralNet(all_weights=all_weights1)
+    child1.brain = SkipNeuralNet(all_weights=all_weights1, **parents[0].brain.get_configs())
+    child2.brain = SkipNeuralNet(all_weights=all_weights1, **parents[0].brain.get_configs())
 
     return [child1, child2]
 

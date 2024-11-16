@@ -17,23 +17,10 @@ from frame_plot import plot_framed
 
 
 
-def world_framed():
-    os.chdir('src/logs/')
+def world_framed(path_run, gen : int):
 
-    # path = "run_2022-09-19 20 19 42"
-    path = get_newest_file()
-    # gen = 61
-    logged_gen = -1
-    if len(sys.argv) > 1:
-        logged_gen = int(sys.argv[1])
 
-    if len(sys.argv) > 2:
-        run = int(sys.argv[2])
-        path = os.listdir()[run]
-
-    gen = sorted_alphanumeric(os.listdir(f"{path}/generations/"))[logged_gen]
-
-    with open(path + '/world_configurations/world_params.json', 'r') as world_configs_file:
+    with open(path_run + '/world_configurations/world_params.json', 'r') as world_configs_file:
         world_configs = json.load(world_configs_file)
 
     n_species = world_configs['n_species']
@@ -44,20 +31,20 @@ def world_framed():
     else:
         color_species = distinct_colors(n_colors = n_species).astype(np.float32)
 
-    zone_mask = np.loadtxt(path + '/world_configurations/death_mask', dtype=np.bool_)
+    zone_mask = np.loadtxt(path_run + '/world_configurations/death_mask', dtype=np.bool_)
     world_shape = zone_mask.shape 
 
-    if  os.path.exists(path + f'/world_configurations/wall_mask'):
-        wall_mask = np.loadtxt(path + '/world_configurations/wall_mask', dtype=np.bool_)
+    if  os.path.exists(path_run + f'/world_configurations/wall_mask'):
+        wall_mask = np.loadtxt(path_run + '/world_configurations/wall_mask', dtype=np.bool_)
 
     else:            
         wall_mask = np.zeros_like(world_shape) 
 
-    path = f'{path}/generations/{gen}'
     
-    stats = pd.read_csv(os.path.join(path, "statistics/stats.csv"))
+    path_gen = get_path_gen(gen)
+    stats = pd.read_csv(os.path.join(path_gen, "statistics/stats.csv"))
 
-    path = os.path.join(path, "step_pop_pos_species")
+    path = os.path.join(path_gen, "step_pop_pos_species")
     text_space = 1.0
     plot_images = []
     plot_names = [name for name in ['total_killed', 'total_in_zone'] if name in stats.columns]
@@ -80,14 +67,17 @@ def world_framed():
             species_pos = pop_pos[pop_pos[:, -1] == species, :2]
             world_3d[species_pos[:, 0], species_pos[:, 1], :] = color_species[species-1]
 
-        img_3d_resized = cv2.resize(world_3d, (1000, 1000))
+
+        world_img_size = 500
+        img_3d_resized = cv2.resize(world_3d, (world_img_size, world_img_size))
+
         text_canvas = np.ones((img_3d_resized.shape[0], 
                             int(img_3d_resized.shape[1] * text_space), 
                             img_3d_resized.shape[2]), dtype=np.float32) * 0.8
 
         step_stats = stats.iloc[i]
         offset = 30
-        cv2.putText(text_canvas, f"Generation: {gen[3:]}", 
+        cv2.putText(text_canvas, f"Generation: {gen}", 
                     org=(20, offset), **text_specs)
         
         text_names = [name for name in stats.columns if name not in plot_names]
@@ -112,29 +102,88 @@ def world_framed():
 
         canvas_images.append(canvas)
 
-    return canvas_images
-        
+    frames = np.array(canvas_images)
+    return frames
+
+def get_path_run():
 
 
+    if len(sys.argv) > 2:
+        run = int(sys.argv[2])
+        path_run = os.listdir()[run]
+    else:
+        path_run = get_newest_file()
+    
+    return path_run
+
+def get_gen(path_run) -> int:
+
+    if len(sys.argv) > 1:
+        logged_gen = int(sys.argv[1])
+    else: 
+        logged_gen = -1
+
+    gen = sorted_alphanumeric(os.listdir(f"{path_run}/generations/"))[logged_gen]
+
+    return int(gen[3:])
+
+def get_path_gen(gen, path_run):
+    return f'{path_run}/generations/gen{gen}'
+
+
+def load_frames(path_gen):
+    frames = np.load(path_gen + '/video/frames.npz')
+    return frames["arr_0"]
+
+def save_frames(path_gen, frames):
+
+    if os.path.exists(path_gen + '/video'):
+        return 
+    os.mkdir(path_gen + '/video')
+    np.savez_compressed(path_gen + '/video/frames', frames)
+
+def get_frames(return_paths=False):
+
+    os.chdir('src/logs/')
+    
+    path_run = get_path_run()
+    gen = get_gen(path_run=path_run)
+    path_gen = get_path_gen(gen, path_run=path_run)
+
+    frames_already_exists = True if os.path.exists(path_gen + '/video') else False
+
+    if frames_already_exists:
+        frames = load_frames(path_gen)
+    else:
+        frames = world_framed(path_run=path_run, gen=gen)
+    
+    if return_paths:
+        return frames, {'path_run': path_run, 'path_gen': path_gen, 'gen': gen}
+    
+    return frames
 
 if __name__ == '__main__':
     
-    frames = world_framed()
+    frames, info_dict = get_frames(return_paths=True)
+
     i = 0
     i_max = len(frames) - 1
     while True:
-        # if i < 0:
-        #     i = i_max 
         
-        cv2.imshow(f'gen', frames[i])
+        cv2.imshow(f'gen{info_dict["gen"]}', frames[i])
 
-        if cv2.waitKeyEx() == 2424832:
+        pressed_key = cv2.waitKeyEx()
+
+        if pressed_key == 27:
+            break
+        if pressed_key == 2424832:
             i -= 1
         else: 
             i += 1
+        
+        i = i % (i_max +1)
 
-        if i > i_max:
-            break
-    
     cv2.destroyAllWindows()
+
+    save_frames(info_dict["path_gen"], frames)
 

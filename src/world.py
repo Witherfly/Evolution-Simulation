@@ -125,7 +125,7 @@ class World():
     def get_config(self) -> dict[str, Any]:
             
         log_var_list = ["world_shape", "n_population", 'n_steps', 'n_max_gen', 
-            'n_connections', 'create_logs', 
+            'n_connections', 'create_logs', 'n_neurons_per_layer',
             'kill_enabled', 'no_spawn_in_zone', 'n_species', 'trans_species_killing']
         
         param_dict = {key:self.__dict__[key] for key in log_var_list}
@@ -193,7 +193,7 @@ class World():
             
 
     @staticmethod
-    def selection(dot_objects : list[Dot], survived : npt.NDArray[np.bool_], stat_collector=None) -> tuple[list[Dot], int, int]:
+    def selection(dot_objects : list[Dot], survived : npt.NDArray[np.bool_], stat_collector=None):
 
         parent_objects = []
         for i, dot in enumerate(dot_objects):
