@@ -38,6 +38,7 @@ class World():
                  n_species : int = 1,
                  trans_species_killing : str = 'no_restriction', # domestic_only, foreign_only 
                  species_obs : bool = False,
+                 dot_density_obs : bool = True,
                  species_rel_size : tuple[float, ...] | None = None,
                  
                  ):
@@ -66,6 +67,18 @@ class World():
         #         raise Exception("multi_species is off but species-specificts were passed as arguments")
         self.trans_species_killing = trans_species_killing
         self.species_obs = species_obs
+        self.dot_density_obs = dot_density_obs
+        self.dot_density_mask_left = np.array([[0, 0, 1, 1],
+                                               [0, 1, 1, 1],
+                                               [1, 1, 1, 0],
+                                               [0, 1, 1, 1],
+                                               [0, 0, 1, 1]], dtype=np.bool_)
+        self.dot_density_mask_down = np.rot90(self.dot_density_mask_left, 1)
+        self.dot_density_mask_right = np.rot90(self.dot_density_mask_left, 2)
+        self.dot_density_mask_up = np.rot90(self.dot_density_mask_left, 3)
+
+        self.world_padding : int = max(self.dot_density_mask_left.shape[0], self.dot_density_mask_left.shape[1]//2)
+
         if species_rel_size is None: # all species have the same size 
             self.species_rel_size = tuple([1 / self.n_species,] * self.n_species)
 
@@ -105,6 +118,8 @@ class World():
             self.n_dif_inputs += 4
         if self.species_obs:
             self.n_dif_inputs += 4 
+        if self.dot_density_obs:
+            self.n_dif_inputs += 4
         
         self.n_neurons_per_layer = (self.n_dif_inputs, *n_neurons_hidden_layer, self.n_dif_outputs)
         # plotting
@@ -248,15 +263,18 @@ class World():
         for gen in range(1, self.n_max_gen + 1):
             
             print(gen)
+            self.current_step = 0
             self.current_gen = gen
+            self.place_pop()
+            
             self.callbacks.on_gen_begin(self)
 
-            self.place_pop()
             for step in range(1, self.n_steps + 1):
             
                 
                 self.current_step = step
-                
+                self.world_state_padded = np.pad(self.world_state, self.world_padding)
+
                 for i, dot in enumerate(self.dot_objects): 
                     
                     if dot.alive:
@@ -267,7 +285,7 @@ class World():
 
                 
                 self.callbacks.on_step_end(self)
-                    
+     
             is_alive, zone_info_dict = self.death_func(self.pop_pos) 
             
             parent_objects = self.selection(self.dot_objects, is_alive, self.plotting_stat_collector)
@@ -348,6 +366,16 @@ class World():
         nswe_blocked = [north_blocked, south_blocked, west_blocked, east_blocked]
         
         obs_list += nswe_blocked
+
+        if self.dot_density_obs:
+            x, y = x + self.world_padding, y + self.world_padding
+            dot_density_left = np.sum(self.world_state_padded[x-2:x+3, y-4:y][self.dot_density_mask_left])
+            dot_density_down = np.sum(self.world_state_padded[x+1:x+5, y-2:y+3][self.dot_density_mask_down])
+            dot_density_right = np.sum(self.world_state_padded[x-2:x+3, y+1:y+5][self.dot_density_mask_right])
+            dot_density_up = np.sum(self.world_state_padded[x-4:x, y-2:y+3][self.dot_density_mask_up])
+            
+            obs_list += [dot_density_left, dot_density_down, dot_density_right, dot_density_up]
+            x, y = x - self.world_padding, y - self.world_padding
         
         
         if self.wall_mask is not None:

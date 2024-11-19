@@ -123,7 +123,7 @@ def gene_mix_crossover(parents : list[Dot], dot_type=DotGenetic) -> list[Dot]:
         
     return new_offspring           
     
-def weights_mutation(dot_objects : list[Dot], flip_rate=0.1):
+def weights_mutation(dot_objects : list[Dot], flip_rate=0.2):
 
     if len(dot_objects) == 0:
         return []

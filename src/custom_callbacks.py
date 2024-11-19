@@ -129,6 +129,11 @@ class LogWorldState(LoggingPointMixin):
         self.log_pos = log_pos
         self.multi_species = False   
         self.log_current_gen = False
+    
+    def on_run_begin(self, world):
+        self.field_names = ["step", "total_killed", "total_in_zone"] + \
+                        [f"killed_species_{i}" for i in range(1, world.n_species+1)] + \
+                        [f"in_zone_species_{i}" for i in range(1, world.n_species+1)]
 
     def on_gen_begin(self, world):
         
@@ -136,6 +141,25 @@ class LogWorldState(LoggingPointMixin):
             self.log_current_gen = True 
         else:
             self.log_current_gen = False 
+        
+        if self.log_current_gen: 
+            gen = world.current_gen
+            if not os.path.isdir(f"generations/gen{gen}"):
+                os.mkdir(f"generations/gen{gen}")
+                os.mkdir(f"generations/gen{gen}/statistics")
+                with open(f"generations/gen{gen}/statistics/stats.csv", "a") as fp:
+                    writer = csv.DictWriter(fp, fieldnames=self.field_names)
+                    writer.writeheader()
+                    writer.writerow({key:0 for key in self.field_names})
+                    
+            if world.n_species > 1:
+                self.multi_species = True 
+                os.mkdir(f'generations/gen{gen}/step_pop_pos_species') 
+            else:
+                os.mkdir(f'generations/gen{gen}/step_world_state')
+            os.mkdir(f'generations/gen{gen}/step_pop_pos')
+
+            self.save_pop_pos(world)
 
 
                      
@@ -145,29 +169,9 @@ class LogWorldState(LoggingPointMixin):
             
             step = world.current_step
             gen = world.current_gen
-            world_state = world.world_state
-            field_names = ["step", "total_killed", "total_in_zone"] + \
-                        [f"killed_species_{i}" for i in range(1, world.n_species+1)] + \
-                        [f"in_zone_species_{i}" for i in range(1, world.n_species+1)]
-            
-            if step == 1:
-                if not os.path.isdir(f"generations/gen{gen}"):
-                    os.mkdir(f"generations/gen{gen}")
-                    os.mkdir(f"generations/gen{gen}/statistics")
-                    with open(f"generations/gen{gen}/statistics/stats.csv", "a") as fp:
-                        writer = csv.DictWriter(fp, fieldnames=field_names)
-                        writer.writeheader()
-                        
-                if world.n_species > 1:
-                    self.multi_species = True 
-                    os.mkdir(f'generations/gen{gen}/step_pop_pos_species') 
-                else:
-                    os.mkdir(f'generations/gen{gen}/step_world_state')
-                os.mkdir(f'generations/gen{gen}/step_pop_pos')
-            
 
             with open(f"generations/gen{gen}/statistics/stats.csv", "a") as fp:
-                writer = csv.DictWriter(fp, fieldnames=field_names)
+                writer = csv.DictWriter(fp, fieldnames=self.field_names)
                 alive_dots = [dot for dot in world.dot_objects if dot.alive]
                 n_total_killed = world.n_population - len(alive_dots)
                 n_total_in_zone = sum(world.death_func(world.pop_pos[[dot.id for dot in alive_dots], :])[0])
@@ -181,25 +185,28 @@ class LogWorldState(LoggingPointMixin):
                     is_in_zone, _ = world.death_func(pop_pos_species)
                     n_in_zone_species.append(sum(is_in_zone))
 
-                row_vals = [world.current_step, n_total_killed, n_total_in_zone] + n_killed_species + n_in_zone_species
-                row = {key:val for key, val in zip(field_names, row_vals)}
+                row_vals = [step, n_total_killed, n_total_in_zone] + n_killed_species + n_in_zone_species
+                row = {key:val for key, val in zip(self.field_names, row_vals)}
                 writer.writerow(row)
             
-            if self.multi_species:
-                pop_pos = world.pop_pos
-                species = np.array(world.species_list)
+            self.save_pop_pos(world)
                 
-                pop_pos_species = np.c_[pop_pos, species] 
+            # else: 
+            #     np.savetxt(f'generations/gen{gen}/step_world_state/step{step}', world.world_state, fmt="%5i")
+                
+                
+            # if self.log_pos:
+            #     pop_pos = world.pop_pos
+            #     np.savetxt(f'generations/gen{gen}/step_pop_pos/step{step}', pop_pos, fmt="%5i")
+        
+    def save_pop_pos(self, world):
 
-                np.savetxt(f'generations/gen{gen}/step_pop_pos_species/step{step}', pop_pos_species, fmt="%s")
-                
-            else: 
-                np.savetxt(f'generations/gen{gen}/step_world_state/step{step}', world_state, fmt="%5i")
-                
-                
-            if self.log_pos:
-                pop_pos = world.pop_pos
-                np.savetxt(f'generations/gen{gen}/step_pop_pos/step{step}', pop_pos, fmt="%5i")
+        pop_pos = world.pop_pos
+        species = np.array(world.species_list)
+        
+        pop_pos_species = np.c_[pop_pos, species] 
+
+        np.savetxt(f'generations/gen{world.current_gen}/step_pop_pos_species/step{world.current_step}', pop_pos_species, fmt="%s")
                             
 class WorldConverter:
     

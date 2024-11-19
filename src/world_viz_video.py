@@ -41,7 +41,7 @@ def world_framed(path_run, gen : int):
         wall_mask = np.zeros_like(world_shape) 
 
     
-    path_gen = get_path_gen(gen)
+    path_gen = get_path_gen(gen, path_run=path_run)
     stats = pd.read_csv(os.path.join(path_gen, "statistics/stats.csv"))
 
     path = os.path.join(path_gen, "step_pop_pos_species")
@@ -50,22 +50,33 @@ def world_framed(path_run, gen : int):
     plot_names = [name for name in ['total_killed', 'total_in_zone'] if name in stats.columns]
     n_steps = world_configs['n_steps']
 
-    plot_images = plot_framed(np.arange(1, n_steps+1), 
+    plot_images = plot_framed(np.arange(n_steps+1), 
                               [stats[name] for name in plot_names], 
                               Y_labels=plot_names)
 
     canvas_images = []
 
+    alive_last_step = np.ones(world_configs['n_population'])
+    pop_pos_last_step = np.zeros((world_configs['n_population'], 3), dtype=np.int16)
     for i, file in  enumerate(os.listdir(path)):
         print(i)
-        pop_pos = np.loadtxt(os.path.join(path, f'step{i+1}'), dtype=np.int16)
+        pop_pos = np.loadtxt(os.path.join(path, f'step{i}'), dtype=np.int16)
+
+        alive_current_step = np.all(pop_pos[:, :2] != np.array([-2, -2]), axis=1)
+        killed_pos = pop_pos_last_step[np.logical_and(alive_last_step, ~alive_current_step)]
+        pop_pos_alive = pop_pos[alive_current_step]
 
         world_3d = np.zeros((*world_shape, 3), dtype=np.float32) 
         world_3d[zone_mask, :] = np.ones((3,)) * 0.2
         world_3d[wall_mask, :] = np.ones((3,)) * 0.6
         for species in range(1, n_species+1):
-            species_pos = pop_pos[pop_pos[:, -1] == species, :2]
+            species_pos = pop_pos_alive[pop_pos_alive[:, -1] == species, :2]
+            species_killed_pos = killed_pos[killed_pos[:, -1] == species, :2]
             world_3d[species_pos[:, 0], species_pos[:, 1], :] = color_species[species-1]
+            world_3d[species_killed_pos[:, 0], species_killed_pos[:, 1], :] = color_species[species-1] * 0.4
+
+        pop_pos_last_step = pop_pos.copy()
+        alive_last_step = alive_current_step.copy()
 
 
         world_img_size = 500
