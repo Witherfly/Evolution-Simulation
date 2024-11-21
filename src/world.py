@@ -76,6 +76,7 @@ class World():
         self.dot_density_mask_down = np.rot90(self.dot_density_mask_left, 1)
         self.dot_density_mask_right = np.rot90(self.dot_density_mask_left, 2)
         self.dot_density_mask_up = np.rot90(self.dot_density_mask_left, 3)
+        self.dot_density_mask_size = np.count_nonzero(self.dot_density_mask_left)
 
         self.world_padding : int = max(self.dot_density_mask_left.shape[0], self.dot_density_mask_left.shape[1]//2)
 
@@ -369,10 +370,10 @@ class World():
 
         if self.dot_density_obs:
             x, y = x + self.world_padding, y + self.world_padding
-            dot_density_left = np.sum(self.world_state_padded[x-2:x+3, y-4:y][self.dot_density_mask_left])
-            dot_density_down = np.sum(self.world_state_padded[x+1:x+5, y-2:y+3][self.dot_density_mask_down])
-            dot_density_right = np.sum(self.world_state_padded[x-2:x+3, y+1:y+5][self.dot_density_mask_right])
-            dot_density_up = np.sum(self.world_state_padded[x-4:x, y-2:y+3][self.dot_density_mask_up])
+            dot_density_left = np.sum(self.world_state_padded[x-2:x+3, y-4:y][self.dot_density_mask_left]) / self.dot_density_mask_size
+            dot_density_down = np.sum(self.world_state_padded[x+1:x+5, y-2:y+3][self.dot_density_mask_down]) / self.dot_density_mask_size
+            dot_density_right = np.sum(self.world_state_padded[x-2:x+3, y+1:y+5][self.dot_density_mask_right]) / self.dot_density_mask_size
+            dot_density_up = np.sum(self.world_state_padded[x-4:x, y-2:y+3][self.dot_density_mask_up]) / self.dot_density_mask_size
             
             obs_list += [dot_density_left, dot_density_down, dot_density_right, dot_density_up]
             x, y = x - self.world_padding, y - self.world_padding
