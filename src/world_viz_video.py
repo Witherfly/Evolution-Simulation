@@ -196,5 +196,5 @@ if __name__ == '__main__':
 
     cv2.destroyAllWindows()
 
-    save_frames(info_dict["path_gen"], frames)
+    # save_frames(info_dict["path_gen"], frames)
 

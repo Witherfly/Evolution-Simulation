@@ -313,19 +313,18 @@ class World():
             self.plot_dict = None 
 
         self.n_survived_list.append(self.plotting_stat_collector.survived_counts)
-        self.n_killed_list.append(self.plotting_stat_collector.killed_counts)
-        self.plotting_stat_collector.reset()
+        rel_survivors = np.array(self.n_survived_list) / self.species_abs_size
 
-        if self.n_species > 1 and len(self.n_survived_list[0]) == self.n_species:
-            rel_survivors = np.array(self.n_survived_list) / self.species_abs_size
+        rel_killed = None 
+        if self.kill_enabled:
+            self.n_killed_list.append(self.plotting_stat_collector.killed_counts)
             rel_killed = np.array(self.n_killed_list) / self.species_abs_size
-        else:
-            rel_survivors = np.array(self.n_survived_list) / self.n_population
-            rel_killed = np.array(self.n_killed_list) / self.n_population
+
+        self.plotting_stat_collector.reset()
         
         is_last_gen = False if self.current_gen != self.n_max_gen else True 
-        
-        plot(is_last_gen, rel_survivors, rel_killed, self.plot_dict)
+
+        plot(is_last_gen, rel_survivors, self.plot_dict, killed=rel_killed)
      
     def create_observation(self, id : int) -> npt.NDArray[np.float32]:
         

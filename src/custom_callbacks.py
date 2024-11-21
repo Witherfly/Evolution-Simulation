@@ -131,9 +131,12 @@ class LogWorldState(LoggingPointMixin):
         self.log_current_gen = False
     
     def on_run_begin(self, world):
-        self.field_names = ["step", "total_killed", "total_in_zone"] + \
-                        [f"killed_species_{i}" for i in range(1, world.n_species+1)] + \
+        self.field_names = ["step", "total_in_zone"] + \
                         [f"in_zone_species_{i}" for i in range(1, world.n_species+1)]
+
+        if world.kill_enabled:
+            self.field_names += ['total_killed'] + [f"killed_species_{i}" for i in range(1, world.n_species+1)]
+        
 
     def on_gen_begin(self, world):
         
@@ -184,8 +187,12 @@ class LogWorldState(LoggingPointMixin):
                     pop_pos_species = world.pop_pos[[dot.id for dot in alive_dots_species], :]
                     is_in_zone, _ = world.death_func(pop_pos_species)
                     n_in_zone_species.append(sum(is_in_zone))
-
-                row_vals = [step, n_total_killed, n_total_in_zone] + n_killed_species + n_in_zone_species
+                
+                # important: order needs to match order in self.field_names !
+                row_vals = [step, n_total_in_zone] + n_in_zone_species
+                if world.kill_enabled:
+                    row_vals = [n_total_killed,] + n_killed_species 
+                
                 row = {key:val for key, val in zip(self.field_names, row_vals)}
                 writer.writerow(row)
             

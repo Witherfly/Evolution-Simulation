@@ -24,7 +24,7 @@ def plot_downsampled(y, *args, **kwargs):
 
     plt.plot(y_downsampled, *args, **kwargs)
 
-def plot(last_gen, survivors, killed, plot_dict):
+def plot(last_gen, survivors, plot_dict, killed=None):
     #display.clear_output(wait=True)
     
     plt.clf()
@@ -34,9 +34,10 @@ def plot(last_gen, survivors, killed, plot_dict):
     for i in range(survivors.shape[1]):
         plot_downsampled(survivors[:, i], label=f"survivors {i}", color=tuple(colors_rgb[i, :]))
         plt.text(survivors.shape[0] - 1, survivors[-1, i], str(round(survivors[-1, i], 2)))
-    for i in range(killed.shape[1]):
-        plot_downsampled(killed[:, i], label=f"killed {i}", color=tuple(colors_rgb[i, :]) + (0.5,))
-        plt.text(len(killed[:, i])-1, killed[-1, i], str(killed[-1, i]))
+    if killed is not None:
+        for i in range(killed.shape[1]):
+            plot_downsampled(killed[:, i], label=f"killed {i}", color=tuple(colors_rgb[i, :]) + (0.5,))
+            plt.text(len(killed[:, i])-1, killed[-1, i], str(killed[-1, i]))
     
     if plot_dict is not None:
         for val_list, name in zip(plot_dict.values(), plot_dict.keys()):
@@ -56,7 +57,6 @@ def plot(last_gen, survivors, killed, plot_dict):
 class PlottingStatCollector:
     pass
         
-
 
 class StatCollector(PlottingStatCollector):
     
@@ -82,17 +82,20 @@ class StatCollector(PlottingStatCollector):
 
 class StatCollectorMultiSpecies(PlottingStatCollector):
     
-    def __init__(self, n_species):
+    def __init__(self, n_species, kill_enabled=True):
         self.n_species = n_species
+        self.kill_enabled = kill_enabled
         self.reset()
 
     def __call__(self, dot, survived):
-        self.killed_counts[dot.species - 1] += not dot.alive
         self.survived_counts[dot.species - 1] += survived
+        if self.kill_enabled:
+            self.killed_counts[dot.species - 1] += not dot.alive
 
     def reset(self):
         self.survived_counts = np.zeros((self.n_species,), np.uint8)
-        self.killed_counts = np.zeros((self.n_species,), np.uint8)
+        if self.kill_enabled:
+            self.killed_counts = np.zeros((self.n_species,), np.uint8)
 
 
 
