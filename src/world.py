@@ -62,11 +62,8 @@ class World():
         self.plotting_stat_collector = plotting_stat_collector 
         if plotting_stat_collector is None:
             self.plotting_stat_collector = StatCollector()
-        # if self.n_species == 1:
-        #     if species_obs or species_rel_size is not None or trans_species_killing != 'no_restriction':
-        #         raise Exception("multi_species is off but species-specificts were passed as arguments")
-        self.trans_species_killing = trans_species_killing
-        self.species_obs = species_obs
+        self.trans_species_killing = trans_species_killing if n_species > 1 else 'no_restriction'
+        self.species_obs = species_obs if n_species > 1 else False
         self.dot_density_obs = dot_density_obs
         self.dot_density_mask_left = np.array([[0, 0, 1, 1],
                                                [0, 1, 1, 1],
@@ -82,9 +79,9 @@ class World():
 
         if species_rel_size is None: # all species have the same size 
             self.species_rel_size = tuple([1 / self.n_species,] * self.n_species)
-
         else:
             self.species_rel_size = species_rel_size
+
         self.species_abs_size = [int(i*self.n_population) for i in self.species_rel_size]
         for i in range(self.n_population - sum(self.species_abs_size)): 
             self.species_abs_size[i] += 1
@@ -190,14 +187,11 @@ class World():
         
         self.dot_objects : list[Dot] = []
         
-        if self.n_species > 1:
-            species_thresh = np.cumsum(self.species_abs_size)
+        species_thresh = np.cumsum(self.species_abs_size)
         
-        species = None 
         for i in range(self.n_population):
 
-            if self.n_species > 1:
-                species = np.sum(species_thresh <= i) + 1
+            species = np.sum(species_thresh <= i) + 1
             dot = self.dot_type(id=i, species=species)
             dot.random_init(self.n_connections, self.n_neurons_per_layer)
             
@@ -223,32 +217,21 @@ class World():
     
     def make_next_generation(self, parent_objects) -> list[Dot]:
 
-        if self.n_species > 1:
-            new_dot_objects = [] 
-            for i in range(1, self.n_species + 1):
-                parent_objects_species = [d for d in parent_objects if d.species == i]
-                if len(parent_objects_species) <= 1:
-                    parent_objects_species = [d for d in self.dot_objects if d.species == i]
-                offspring = create_offspring(parent_objects_species, 
-                                             n_population=self.species_abs_size[i-1], 
-                                             species=i, 
-                                             dot_type=self.dot_type,
-                                             crossover_func=self.crossover_func,
-                                             mutation_func=self.mutation_func)
-                new_dot_objects += offspring
-
-        else:
-            if len(parent_objects) <= 1:
-                parent_objects = self.dot_objects
-            new_dot_objects = create_offspring(parent_objects, 
-                                             n_population=self.n_population,
-                                             dot_type=self.dot_type,
-                                             crossover_func=self.crossover_func,
-                                             mutation_func=self.mutation_func)
+        new_dot_objects = [] 
+        for i in range(1, self.n_species + 1):
+            parent_objects_species = [d for d in parent_objects if d.species == i]
+            if len(parent_objects_species) <= 1:
+                parent_objects_species = [d for d in self.dot_objects if d.species == i]
+            offspring = create_offspring(parent_objects_species, 
+                                            n_population=self.species_abs_size[i-1], 
+                                            species=i, 
+                                            dot_type=self.dot_type,
+                                            crossover_func=self.crossover_func,
+                                            mutation_func=self.mutation_func)
+            new_dot_objects += offspring
 
         assert len(new_dot_objects) == self.n_population
 
-        # if hasattr(new_dot_objects[0], 'unencode_genome'):
         for i, dot in enumerate(new_dot_objects):
             dot.unencode_genome(self.n_neurons_per_layer)
             dot.id = i
@@ -430,15 +413,14 @@ class World():
         idx = np.argwhere(np.logical_and(self.pop_pos[:, 0] == pos[0], self.pop_pos[:, 1] == pos[1])).item()
         return self.dot_objects[idx]
         
-    def apply_action(self, id : int, action : npt.NDArray[np.bool_]):
+    def apply_action(self, id : int, action):
         
         
         current_pos = self.pop_pos[id]
         new_pos = np.copy(current_pos)
         kill_pos : tuple[int, int] | None = None 
          
-        action_number : int = np.argwhere(action).item()
-        match action_number:
+        match action:
             case 0:
                 new_pos[0] = current_pos[0] - 1 
             case 1:
@@ -461,10 +443,10 @@ class World():
             was_killed = self.kill(kill_pos, killer_id=id)
                     
         def is_square_free(coords) -> bool:
-            if coords[1] >= self.world_shape[1] or coords[0] >= self.world_shape[0]: # out of bound bottom and left
+            if coords[1] >= self.world_shape[1] or coords[0] >= self.world_shape[0] or coords[0] < 0 or coords[1] < 0: #for performance in one single line
                 return False
-            elif np.any(coords < 0): # out of bound top and right 
-                return False
+            # elif np.any(coords < 0): # out of bound top and right 
+                # return False
             elif self.world_state[coords[0], coords[1]] == 1: #square already ocupied by other dot
                 return False
             
@@ -489,19 +471,17 @@ class World():
         if victim is None: #no dot found at kill pos
             return False 
 
+        killer = self.dot_objects[killer_id]
         
-        if self.n_species > 1:
-            killer = self.dot_objects[killer_id]
-            
-            match self.trans_species_killing:
-                case 'no_restricion': # No restriction 
-                    pass 
-                case 'domestic_only':
-                    if victim.species != killer.species: # no kill if not same species 
-                        return False 
-                case 'foreign_only':
-                    if victim.species == killer.species: # no kill if same species 
-                        return False 
+        match self.trans_species_killing:
+            case 'no_restricion': # No restriction 
+                pass 
+            case 'domestic_only':
+                if victim.species != killer.species: # no kill if not same species 
+                    return False 
+            case 'foreign_only':
+                if victim.species == killer.species: # no kill if same species 
+                    return False 
          
         victim.alive = False 
         self.world_state[kill_pos[0], kill_pos[1]] = 0

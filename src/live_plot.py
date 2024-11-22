@@ -18,11 +18,6 @@ def downsample_array(arr, max_length=20):
     
     return downsampled
 
-def plot_downsampled(y, *args, **kwargs):
-
-    y_downsampled = downsample_array(y, max_length=300)
-
-    plt.plot(y_downsampled, *args, **kwargs)
 
 def plot(last_gen, survivors, plot_dict, killed=None):
     #display.clear_output(wait=True)
@@ -31,17 +26,20 @@ def plot(last_gen, survivors, plot_dict, killed=None):
     plt.title('Training...')
     plt.xlabel('Number of Generations')
     plt.ylabel('Percentage')
+
+    downsampled_idxs = downsample_array(np.arange(len(survivors)), max_length=10)
     for i in range(survivors.shape[1]):
-        plot_downsampled(survivors[:, i], label=f"survivors {i}", color=tuple(colors_rgb[i, :]))
+        plt.plot(downsampled_idxs+1, survivors[downsampled_idxs][:, i], label=f"survivors {i+1}", color=tuple(colors_rgb[i, :]))
         plt.text(survivors.shape[0] - 1, survivors[-1, i], str(round(survivors[-1, i], 2)))
     if killed is not None:
         for i in range(killed.shape[1]):
-            plot_downsampled(killed[:, i], label=f"killed {i}", color=tuple(colors_rgb[i, :]) + (0.5,))
+            plt.plot(downsampled_idxs+1, killed[downsampled_idxs][:, i], label=f"killed {i+1}", color=tuple(colors_rgb[i, :]) + (0.5,))
             plt.text(len(killed[:, i])-1, killed[-1, i], str(killed[-1, i]))
     
     if plot_dict is not None:
         for val_list, name in zip(plot_dict.values(), plot_dict.keys()):
-            plot_downsampled(val_list, label=name)
+            plt.plot(downsampled_idxs+1, np.array(val_list)[downsampled_idxs], label=name)
+            
         
     plt.ylim(ymin=0)
     plt.legend(loc="upper left")
@@ -50,7 +48,7 @@ def plot(last_gen, survivors, plot_dict, killed=None):
     else:
         plt.savefig("survivor_killed_plot.png")
         plt.show(block=True)
-    plt.pause(.005)
+    plt.pause(.001)
     
     #if last_gen:
         

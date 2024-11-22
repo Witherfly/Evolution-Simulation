@@ -11,9 +11,9 @@ from live_plot import StatCollectorMultiSpecies, StatCollector
 
 def main():
     world_shape = (40, 40)
-    n_max_gen = 1_000
-    n_logs = 20
-    n_species = 3
+    n_max_gen = 10
+    n_logs = 10
+    n_species = 4
     dot_type = DotGeneless
     crossover_func = weights_row_crossover
     mutation_func = weights_mutation
@@ -46,7 +46,7 @@ def main():
                 no_spawn_in_zone=True,
                 n_species=n_species, 
                 plotting_stat_collector=stats_collector,
-                species_obs=True,
+                species_obs=False,
                 dot_density_obs=False,
                 trans_species_killing='no_restriction',
                 callbacks=[init_logs, world_state_logging, time_gens, time_gens_logger])

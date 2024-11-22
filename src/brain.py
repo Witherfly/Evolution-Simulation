@@ -40,7 +40,7 @@ class Brain():
                     
         self.all_weights = [self.weight_ih, self.weight_io, self.weight_ho]
               
-    def predict(self, input : npt.NDArray[np.float32]) -> npt.NDArray[np.bool_]:
+    def predict(self, input : npt.NDArray[np.float32]) -> int:
         
         input = np.append(input, 1.0).reshape(-1, 1)
 
@@ -51,10 +51,8 @@ class Brain():
         
         
         action : int = np.argmax(np.ravel(output)).item()
-        action_array = np.zeros((self.output_size,), dtype=np.bool_)
-        action_array[action] = True
         
-        return action_array
+        return action
 
 
 
@@ -128,7 +126,7 @@ class SkipNeuralNet:
         
     #     return action_array
 
-    def predict(self, input):
+    def predict(self, input) -> int:
 
         n_layers = len(self.n_neurons_per_layer)
         layer_outputs = np.empty((len(self.n_neurons_per_layer),
@@ -153,10 +151,8 @@ class SkipNeuralNet:
         
         output = layer_outputs[-1, 1:self.n_neurons_per_layer[-1]+1]
         action : int = np.argmax(np.ravel(output)).item()
-        action_array = np.zeros((self.output_size,), dtype=np.bool_)
-        action_array[action] = True
         
-        return action_array
+        return action
 
 
 

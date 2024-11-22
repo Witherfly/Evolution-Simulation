@@ -79,7 +79,7 @@ def world_framed(path_run, gen : int):
         alive_last_step = alive_current_step.copy()
 
 
-        world_img_size = 500
+        world_img_size = 1000
         img_3d_resized = cv2.resize(world_3d, (world_img_size, world_img_size))
 
         text_canvas = np.ones((img_3d_resized.shape[0], 

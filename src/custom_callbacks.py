@@ -92,8 +92,11 @@ class TimeGensLogger(TimeGens, LoggingCallback):
 class LoggingPointMixin(LoggingCallback):
     def __init__(self, log_points : str | list[int], n_max_gen : int, n_logs : int):
         
+        if n_logs == 0:
+
+            self.log_points = np.array([])
         
-        if log_points == 'linear':
+        elif log_points == 'linear':
             
             slope = int(n_max_gen / n_logs)
             
@@ -127,7 +130,6 @@ class LogWorldState(LoggingPointMixin):
         super().__init__(log_points, n_max_gen, n_logs)
         
         self.log_pos = log_pos
-        self.multi_species = False   
         self.log_current_gen = False
     
     def on_run_begin(self, world):
@@ -155,12 +157,7 @@ class LogWorldState(LoggingPointMixin):
                     writer.writeheader()
                     writer.writerow({key:0 for key in self.field_names})
                     
-            if world.n_species > 1:
-                self.multi_species = True 
-                os.mkdir(f'generations/gen{gen}/step_pop_pos_species') 
-            else:
-                os.mkdir(f'generations/gen{gen}/step_world_state')
-            os.mkdir(f'generations/gen{gen}/step_pop_pos')
+            os.mkdir(f'generations/gen{gen}/step_pop_pos_species') 
 
             self.save_pop_pos(world)
 
@@ -191,16 +188,12 @@ class LogWorldState(LoggingPointMixin):
                 # important: order needs to match order in self.field_names !
                 row_vals = [step, n_total_in_zone] + n_in_zone_species
                 if world.kill_enabled:
-                    row_vals = [n_total_killed,] + n_killed_species 
+                    row_vals += [n_total_killed,] + n_killed_species 
                 
                 row = {key:val for key, val in zip(self.field_names, row_vals)}
                 writer.writerow(row)
             
             self.save_pop_pos(world)
-                
-            # else: 
-            #     np.savetxt(f'generations/gen{gen}/step_world_state/step{step}', world.world_state, fmt="%5i")
-                
                 
             # if self.log_pos:
             #     pop_pos = world.pop_pos
