@@ -1,4 +1,5 @@
 import numpy as np
+import cv2 
 import datetime
 import os
 
@@ -102,21 +103,22 @@ class Zone_selection:
 
         return is_alive, zone_info 
 
-class Load_custom():
+class Load_custom_death():
     
-    def __init__(self, dir_path : str, file_name : str):
+    def __init__(self, file_name : str, world_shape : tuple[int, int]):
         
-        dir_path = os.path.join("src\custom_masks", dir_path)
+        dir_path = os.path.join(os.getcwd(), "custom_masks", "death_masks")
         
         
         if file_name == "newest":
             
-            file_name = get_newest_file(dir_path)
-            
-        full_path = os.path.join(dir_path, file_name)
-        
+            full_path = get_newest_file(dir_path, return_full_path=True)
         
         self.mask = np.loadtxt(full_path)
+
+        if self.mask.shape != world_shape: 
+
+            self.mask = cv2.resize(self.mask, world_shape)
           
     def __call__(self, pop_pos : np.ndarray) -> tuple[np.ndarray, None]:
         

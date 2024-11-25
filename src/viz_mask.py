@@ -6,10 +6,9 @@ from utils import get_newest_file
 
 
 
+path_wall = get_newest_file("custom_masks/wall_masks/", return_full_path=True)
 
-path_wall = get_newest_file("custom_masks/wall_masks/")
-
-path_death = get_newest_file("custom_masks/death_masks/")
+path_death = get_newest_file("custom_masks/death_masks/", return_full_path=True)
 
 if True:
     death_mask = np.loadtxt(path_death) *0.5

@@ -1,4 +1,5 @@
 import numpy as np
+import cv2
 import datetime
 import os 
 
@@ -33,20 +34,23 @@ class Wall():
         
         return mask
         
-class Load_wall():
+class Load_custom_wall():
     
-    def __init__(self, dir_path, file_name):
+    def __init__(self, file_name, world_shape) -> None:
         
-        dir_path = os.path.join("src\custom_masks", dir_path)
+        dir_path = os.path.join(os.getcwd(), "custom_masks", "wall_masks")
         
         
         if file_name == "newest":
             
-            file_name = get_newest_file(dir_path)
+            full_path = get_newest_file(dir_path, return_full_path=True)
             
-        full_path = os.path.join(dir_path, file_name)
         
         self.mask : npt.NDArray[np.bool_] = np.loadtxt(full_path, dtype=np.bool_)  
+        
+        if self.mask.shape != world_shape: 
+
+            self.mask = cv2.resize(self.mask, world_shape)
 
 if __name__ == '__main__':
     
