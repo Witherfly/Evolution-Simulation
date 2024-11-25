@@ -282,7 +282,7 @@ class InitLogs(LoggingCallback):
 
         current_wdir = os.getcwd()
 
-        dir_path = os.path.join(current_wdir, 'src', 'logs', f'run_{time}')
+        dir_path = os.path.join(current_wdir, 'logs', f'run_{time}')
 
         os.mkdir(dir_path)
             

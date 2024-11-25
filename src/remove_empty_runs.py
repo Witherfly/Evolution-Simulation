@@ -7,7 +7,7 @@ from utils import get_number_at_end
 
 def remove_gens(remove_unit_gen : int = 1):
 
-    os.chdir('src/logs/')
+    os.chdir('logs/')
     for dir in os.listdir():
         generations = os.listdir(os.path.join(dir, 'generations'))
         for gen in generations:
@@ -18,7 +18,7 @@ def remove_gens(remove_unit_gen : int = 1):
 
 def remove_empty_runs(remove_below_n_logged_gens : int = 0):
 
-    os.chdir('src/logs/')
+    os.chdir('logs/')
     n_removed = 0
     for dir in os.listdir():
         generations = os.listdir(os.path.join(dir, 'generations'))

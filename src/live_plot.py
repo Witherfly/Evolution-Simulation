@@ -27,7 +27,7 @@ def plot(last_gen, survivors, plot_dict, killed=None):
     plt.xlabel('Number of Generations')
     plt.ylabel('Percentage')
 
-    downsampled_idxs = downsample_array(np.arange(len(survivors)), max_length=10)
+    downsampled_idxs = downsample_array(np.arange(len(survivors)), max_length=200)
     for i in range(survivors.shape[1]):
         plt.plot(downsampled_idxs+1, survivors[downsampled_idxs][:, i], label=f"survivors {i+1}", color=tuple(colors_rgb[i, :]))
         plt.text(survivors.shape[0] - 1, survivors[-1, i], str(round(survivors[-1, i], 2)))

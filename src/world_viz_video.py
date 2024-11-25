@@ -155,7 +155,7 @@ def save_frames(path_gen, frames):
 
 def get_frames(return_paths=False):
 
-    os.chdir('src/logs/')
+    os.chdir('logs/')
     
     path_run = get_path_run()
     gen = get_gen(path_run=path_run)

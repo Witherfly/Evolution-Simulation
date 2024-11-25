@@ -16,7 +16,7 @@ def remember_cwd():
     finally: 
         os.chdir(curdir)
 
-def get_newest_file(dir_path=None):
+def get_newest_file(dir_path=None, return_full_path=False):
     with remember_cwd():
         if dir_path is not None:
             os.chdir(dir_path)
@@ -24,6 +24,8 @@ def get_newest_file(dir_path=None):
 
         max_file = max(files, key=os.path.getctime)
     
+    if return_full_path:
+        return os.path.join(dir_path, max_file)
     return max_file
 
 

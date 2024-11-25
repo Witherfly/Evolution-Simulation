@@ -112,19 +112,6 @@ class SkipNeuralNet:
             
         return cls(all_weights, n_neurons_per_layer)
 
-    # def predict(self, input : npt.NDArray[np.float32]) -> npt.NDArray[np.bool_]:
-        
-    #     weight_ih, weight_io, weight_ho = self.all_weights
-    #     input = np.append(input, 1.0).reshape(-1, 1)
-
-    #     hidden = np.append(np.tanh( weight_ih @ input), 1.0).reshape(-1, 1)
-    #     output = np.tanh(weight_io @ input + weight_ho @ hidden)
-        
-    #     action : int = np.argmax(np.ravel(output)).item()
-    #     action_array = np.zeros((self.output_size,), dtype=np.bool_)
-    #     action_array[action] = True
-        
-    #     return action_array
 
     def predict(self, input) -> int:
 

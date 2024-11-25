@@ -98,7 +98,9 @@ class World():
         
         self.rnd_seed = random_state
         
-        self.obstacles_enabled = False if self.wall_mask is None or False else True 
+        self.obstacles_enabled = True
+        if self.wall_mask is None or np.all(self.wall_mask == 0):
+            self.obstacles_enabled = False
         
         self.world_size = self.world_shape[0] * self.world_shape[1]
         
@@ -361,7 +363,7 @@ class World():
             x, y = x - self.world_padding, y - self.world_padding
         
         
-        if self.wall_mask is not None:
+        if self.obstacles_enabled:
             try:
                 north_wall = self.wall_mask[x - 1, y]
             except IndexError:
@@ -445,12 +447,11 @@ class World():
         def is_square_free(coords) -> bool:
             if coords[1] >= self.world_shape[1] or coords[0] >= self.world_shape[0] or coords[0] < 0 or coords[1] < 0: #for performance in one single line
                 return False
-            # elif np.any(coords < 0): # out of bound top and right 
-                # return False
+                
             elif self.world_state[coords[0], coords[1]] == 1: #square already ocupied by other dot
                 return False
             
-            elif self.wall_mask is not None: # square occupied by wall tile 
+            elif self.obstacles_enabled: # square occupied by wall tile 
                 if self.wall_mask[coords[0], coords[1]] == 1:
                     return False
             
