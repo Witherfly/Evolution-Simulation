@@ -79,7 +79,7 @@ def world_framed(path_run, gen : int):
         alive_last_step = alive_current_step.copy()
 
 
-        world_img_size = 1000
+        # world_img_size = 1000
         img_3d_resized = cv2.resize(world_3d, (world_img_size, world_img_size))
 
         text_canvas = np.ones((img_3d_resized.shape[0], 
@@ -161,10 +161,11 @@ def get_frames(return_paths=False):
     gen = get_gen(path_run=path_run)
     path_gen = get_path_gen(gen, path_run=path_run)
 
-    frames_already_exists = True if os.path.exists(path_gen + '/video') else False
+    frames_already_exists = False#True if os.path.exists(path_gen + '/video') else False
 
     if frames_already_exists:
         frames = load_frames(path_gen)
+        # frames = [cv2.resize(frame, world_img_size) for frame in frames]
     else:
         frames = world_framed(path_run=path_run, gen=gen)
     
@@ -175,6 +176,7 @@ def get_frames(return_paths=False):
 
 if __name__ == '__main__':
     
+    world_img_size = 1100
     frames, info_dict = get_frames(return_paths=True)
 
     i = 0

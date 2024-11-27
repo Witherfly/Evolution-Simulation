@@ -62,6 +62,8 @@ class World():
         self.plotting_stat_collector = plotting_stat_collector 
         if plotting_stat_collector is None:
             self.plotting_stat_collector = StatCollector()
+        if trans_species_killing not in ['domestic_only', 'no_restriction', 'foreign_only']:
+            raise Exception(trans_species_killing)
         self.trans_species_killing = trans_species_killing if n_species > 1 else 'no_restriction'
         self.species_obs = species_obs if n_species > 1 else False
         self.dot_density_obs = dot_density_obs
@@ -475,7 +477,7 @@ class World():
         killer = self.dot_objects[killer_id]
         
         match self.trans_species_killing:
-            case 'no_restricion': # No restriction 
+            case 'no_restriction': # No restriction 
                 pass 
             case 'domestic_only':
                 if victim.species != killer.species: # no kill if not same species 

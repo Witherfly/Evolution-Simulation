@@ -38,7 +38,10 @@ def get_number_at_end(input_string : str) -> int | None:
 colors_rgb = np.array([[200, 0, 0],
                     [0, 200, 0],
                     [0, 0, 200],
-                    [ 51, 127, 127],
+                    [0, 100, 100],
+                    [100, 0, 100],
+                    [100, 100, 0],
+                    [51, 12, 127],
                     [142, 204,  81]], dtype=np.float32) / 256
 
 text_specs = {  "fontFace"                   : cv2.FONT_HERSHEY_SIMPLEX,

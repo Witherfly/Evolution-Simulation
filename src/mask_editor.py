@@ -54,7 +54,7 @@ def draw(event, current_x, current_y, flags, params):
             
         if drawing_wall:
             # draw the line
-            cv2.line(canvas, (current_x, current_y), (x, y), 255, thickness=10)
+            cv2.line(canvas, (current_x, current_y), (x, y), 255, thickness=15)
             
             # update coordinates
             x, y = current_x, current_y
