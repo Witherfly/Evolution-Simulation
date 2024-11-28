@@ -5,8 +5,6 @@ from dot import Dot
 from utils import colors_rgb
 #from IPython import display
 
-plt.ion()
-mpl.use("Qt5agg") # Qt (PyQt5) backend instead of Tk to stop window from poping to the front 
 
 def downsample_array(arr, max_length=20):
     if len(arr) <= max_length:
@@ -22,6 +20,8 @@ def downsample_array(arr, max_length=20):
 def plot(last_gen, survivors, plot_dict, killed=None):
     #display.clear_output(wait=True)
     
+    plt.ion()
+    mpl.use("Qt5agg") # Qt (PyQt5) backend instead of Tk to stop window from poping to the front 
     plt.clf()
     plt.title('Training...')
     plt.xlabel('Number of Generations')
@@ -47,7 +47,7 @@ def plot(last_gen, survivors, plot_dict, killed=None):
         plt.show(block=False)
     else:
         plt.savefig("survivor_killed_plot.png")
-        plt.show(block=True)
+        plt.show(block=False)
     plt.pause(.001)
     
     #if last_gen:
@@ -99,6 +99,8 @@ class StatCollectorMultiSpecies(PlottingStatCollector):
 
 
 if __name__ == '__main__':
+    plt.ion()
+    mpl.use("Qt5agg") # Qt (PyQt5) backend instead of Tk to stop window from poping to the front 
 
     sc = StatCollectorMultiSpecies(2)
 

@@ -3,10 +3,12 @@ import random
 import os
 import json 
 import datetime 
+import multiprocessing as mp
 
 from dot import Dot, DotGenetic
 from breed_offspring import create_offspring, one_point_crossover, bit_flip_mutation
 from live_plot import plot, PlottingStatCollector, StatCollector
+from live_plot_mp import PlotterMP
 from callbacks_module import Callback, CallbackList
 from custom_callbacks import LoggingCallback
 
@@ -14,6 +16,8 @@ from custom_callbacks import LoggingCallback
 from collections.abc import Callable
 import numpy.typing as npt 
 from typing import Any 
+
+from line_profiler import profile
 
 
 
@@ -59,6 +63,7 @@ class World():
         self.wall_mask = wall_mask 
         self.n_species = n_species
         self.live_plotting = live_plotting
+        self.live_plotting_mp = True
         self.plotting_stat_collector = plotting_stat_collector 
         if plotting_stat_collector is None:
             self.plotting_stat_collector = StatCollector()
@@ -201,7 +206,9 @@ class World():
             
             self.dot_objects.append(dot)   
             
-        # directorys for storing data
+
+        if self.live_plotting and self.live_plotting_mp:
+            self.plot_live_mp_init()
         
         self.callbacks.on_init_simulation(self)
             
@@ -281,7 +288,11 @@ class World():
             self.dot_objects = self.make_next_generation(parent_objects)
             
             if self.live_plotting:
-                self.plot_live(zone_info_dict)
+
+                if self.live_plotting_mp:
+                    self.plot_live_mp(zone_info_dict)
+                else:
+                    self.plot_live(zone_info_dict)
             
             self.callbacks.on_gen_end(self)
     
@@ -312,6 +323,29 @@ class World():
         is_last_gen = False if self.current_gen != self.n_max_gen else True 
 
         plot(is_last_gen, rel_survivors, self.plot_dict, killed=rel_killed)
+    
+    def plot_live_mp_init(self):
+
+        self.plot_queue_mp = mp.Queue()
+        self.plotter_mp = PlotterMP()
+        self.plot_process = mp.Process(target=self.plotter_mp.start, args=(self.plot_queue_mp,), daemon=True)
+        self.plot_process.start()
+
+    def plot_live_mp(self, zone_info_dict):
+        
+        data = {'survived' : self.plotting_stat_collector.survived_counts / self.species_abs_size}
+        if self.kill_enabled:
+            data['killed'] = self.plotting_stat_collector.killed_counts / self.species_abs_size
+        
+        self.plot_queue_mp.put(data)
+
+        self.plotting_stat_collector.reset()
+        
+        is_last_gen = False if self.current_gen != self.n_max_gen else True 
+        if is_last_gen:
+            self.plot_queue_mp.put(None)
+            self.plot_process.join()
+            self.plot_process.kill()
      
     def create_observation(self, id : int) -> npt.NDArray[np.float32]:
         
@@ -445,27 +479,28 @@ class World():
                 
         if kill_pos is not None and self.kill_enabled: 
             was_killed = self.kill(kill_pos, killer_id=id)
-                    
-        def is_square_free(coords) -> bool:
-            if coords[1] >= self.world_shape[1] or coords[0] >= self.world_shape[0] or coords[0] < 0 or coords[1] < 0: #for performance in one single line
-                return False
-                
-            elif self.world_state[coords[0], coords[1]] == 1: #square already ocupied by other dot
-                return False
-            
-            elif self.obstacles_enabled: # square occupied by wall tile 
-                if self.wall_mask[coords[0], coords[1]] == 1:
-                    return False
-            
-            return True 
+
             
             
-        if is_square_free(new_pos):
+        if self.is_square_free(new_pos):
             #updating pos 
             self.world_state[current_pos[0], current_pos[1]] = 0
             self.world_state[new_pos[0], new_pos[1]] = 1
             
             self.pop_pos[id] = new_pos 
+
+    def is_square_free(self, coords) -> bool:
+        if coords[1] >= self.world_shape[1] or coords[0] >= self.world_shape[0] or coords[0] < 0 or coords[1] < 0: #for performance in one single line
+            return False
+            
+        elif self.world_state[coords[0], coords[1]] == 1: #square already ocupied by other dot
+            return False
+        
+        elif self.obstacles_enabled: # square occupied by wall tile 
+            if self.wall_mask[coords[0], coords[1]] == 1:
+                return False
+        
+        return True 
                 
     def kill(self, kill_pos : tuple[int, int], killer_id : int) -> bool: # returns False if no kill happened
         
